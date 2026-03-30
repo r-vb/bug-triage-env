@@ -1,12 +1,15 @@
 """
 FastAPI server exposing OpenEnv HTTP API.
 Endpoints: POST /step, POST /reset, GET /state, GET /tasks, GET /health
+Root / serves a beautiful HTML landing page.
 """
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 import uvicorn
+import os
 
 from environment import BugTriageEnv, Action, Observation, EnvInfo
 
@@ -93,14 +96,19 @@ def list_tasks():
     return {"tasks": list(TASKS.values())}
 
 
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
 def root():
-    return {
-        "name": "Bug Triage OpenEnv",
-        "description": "Real-world GitHub issue triage environment",
-        "endpoints": ["/reset", "/step", "/state", "/tasks", "/health"],
-        "spec": "openenv v1",
-    }
+    """Serve the landing page."""
+    html_path = os.path.join(os.path.dirname(__file__), "index.html")
+    if os.path.exists(html_path):
+        with open(html_path) as f:
+            return HTMLResponse(content=f.read())
+    return HTMLResponse(content="""
+    <html><body style="background:#090c10;color:#3fb950;font-family:monospace;padding:40px">
+    <h1>🐛 Bug Triage OpenEnv</h1>
+    <p>Endpoints: /reset /step /state /tasks /health /docs</p>
+    </body></html>
+    """)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bug Triage OpenEnv</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #090c10;
+    --bg2: #0d1117;
+    --surface: #161b22;
+    --surface2: #1c2128;
+    --border: #21262d;
+    --green: #3fb950;
+    --green-dim: #238636;
+    --green-glow: rgba(63,185,80,0.15);
+    --red: #f85149;
+    --yellow: #d29922;
+    --blue: #58a6ff;
+    --text: #e6edf3;
+    --text-dim: #7d8590;
+    --text-muted: #484f58;
+    --accent: #3fb950;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(63,185,80,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(63,185,80,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Glow orb */
+  body::after {
+    content: '';
+    position: fixed;
+    top: -200px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 800px;
+    height: 400px;
+    background: radial-gradient(ellipse, rgba(63,185,80,0.08) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 24px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ── Header ── */
+  header {
+    padding: 48px 0 0;
+    text-align: center;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(63,185,80,0.1);
+    border: 1px solid rgba(63,185,80,0.3);
+    border-radius: 100px;
+    padding: 6px 16px;
+    font-size: 11px;
+    color: var(--green);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 32px;
+    animation: fadeDown 0.6s ease both;
+  }
+
+  .badge::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(63,185,80,0.4); }
+    50% { opacity: 0.8; box-shadow: 0 0 0 4px rgba(63,185,80,0); }
+  }
+
+  h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(42px, 7vw, 72px);
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    margin-bottom: 8px;
+    animation: fadeDown 0.6s 0.1s ease both;
+  }
+
+  h1 span {
+    color: var(--green);
+    position: relative;
+  }
+
+  .subtitle {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(14px, 2vw, 18px);
+    color: var(--text-dim);
+    font-weight: 400;
+    margin-bottom: 40px;
+    animation: fadeDown 0.6s 0.2s ease both;
+  }
+
+  /* ── Live status bar ── */
+  .status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    flex-wrap: wrap;
+    margin-bottom: 64px;
+    animation: fadeDown 0.6s 0.3s ease both;
+  }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  .status-pill .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+
+  .status-pill strong { color: var(--text); }
+
+  /* ── Score cards ── */
+  .scores-section {
+    margin-bottom: 56px;
+    animation: fadeUp 0.6s 0.4s ease both;
+  }
+
+  .section-label {
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .score-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+
+  .score-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    transition: border-color 0.2s, transform 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .score-card:hover {
+    border-color: rgba(63,185,80,0.4);
+    transform: translateY(-2px);
+  }
+
+  .score-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--green), transparent);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .score-card:hover::before { opacity: 1; }
+
+  .score-card .task-name {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+
+  .score-card .score-val {
+    font-family: 'Syne', sans-serif;
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--green);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .score-card.overall {
+    border-color: rgba(63,185,80,0.3);
+    background: rgba(63,185,80,0.05);
+  }
+
+  .score-card.overall .score-val { font-size: 40px; }
+
+  .score-bar {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    margin-top: 10px;
+    overflow: hidden;
+  }
+
+  .score-bar-fill {
+    height: 100%;
+    background: var(--green);
+    border-radius: 2px;
+    transform-origin: left;
+    animation: barFill 1s 0.8s ease both;
+  }
+
+  @keyframes barFill {
+    from { transform: scaleX(0); }
+    to { transform: scaleX(1); }
+  }
+
+  /* ── Tasks grid ── */
+  .tasks-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 56px;
+    animation: fadeUp 0.6s 0.5s ease both;
+  }
+
+  .task-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+
+  .task-card:hover {
+    border-color: rgba(63,185,80,0.3);
+    transform: translateY(-2px);
+  }
+
+  .task-difficulty {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-weight: 500;
+    margin-bottom: 10px;
+    padding: 3px 10px;
+    border-radius: 100px;
+    display: inline-block;
+  }
+
+  .diff-easy { background: rgba(63,185,80,0.1); color: var(--green); }
+  .diff-medium { background: rgba(210,153,34,0.1); color: var(--yellow); }
+  .diff-hard { background: rgba(248,81,73,0.1); color: var(--red); }
+
+  .task-card h3 {
+    font-family: 'Syne', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+
+  .task-card p {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.6;
+    margin-bottom: 14px;
+  }
+
+  .task-meta {
+    font-size: 10px;
+    color: var(--text-muted);
+    display: flex;
+    gap: 12px;
+  }
+
+  .task-meta span { color: var(--text-dim); }
+
+  /* ── API endpoints ── */
+  .endpoints-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 56px;
+    animation: fadeUp 0.6s 0.6s ease both;
+  }
+
+  .endpoint {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 12px;
+    cursor: pointer;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.2s, background 0.2s;
+  }
+
+  .endpoint:hover {
+    border-color: rgba(88,166,255,0.3);
+    background: rgba(88,166,255,0.04);
+  }
+
+  .method {
+    font-size: 10px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    letter-spacing: 0.05em;
+  }
+
+  .method.get { background: rgba(63,185,80,0.15); color: var(--green); }
+  .method.post { background: rgba(88,166,255,0.15); color: var(--blue); }
+
+  .endpoint-path { color: var(--text); font-weight: 500; }
+  .endpoint-desc { color: var(--text-muted); margin-left: auto; font-size: 11px; }
+
+  /* ── Live test ── */
+  .live-test {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    margin-bottom: 56px;
+    animation: fadeUp 0.6s 0.7s ease both;
+  }
+
+  .live-test h2 {
+    font-family: 'Syne', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .btn-group {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+
+  .btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .btn:hover { border-color: var(--green); color: var(--green); }
+  .btn.active { background: var(--green-dim); border-color: var(--green); color: #fff; }
+
+  .response-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    font-size: 11px;
+    color: var(--green);
+    min-height: 80px;
+    max-height: 320px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    line-height: 1.6;
+    position: relative;
+  }
+
+  .response-box.loading { color: var(--text-muted); }
+  .response-box.error { color: var(--red); }
+
+  .response-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  /* ── Footer ── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 32px 0;
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-muted);
+    animation: fadeUp 0.6s 0.8s ease both;
+  }
+
+  footer a { color: var(--text-dim); text-decoration: none; }
+  footer a:hover { color: var(--green); }
+
+  /* ── Animations ── */
+  @keyframes fadeDown {
+    from { opacity: 0; transform: translateY(-16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @media (max-width: 640px) {
+    .score-grid { grid-template-columns: repeat(2, 1fr); }
+    .tasks-grid { grid-template-columns: 1fr; }
+    .endpoints-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="badge">OpenEnv X SCALER · Axiom Minds</div>
+    <h1>🐛 Bug Triage<br><span>OpenEnv</span></h1>
+    <p class="subtitle">Real-world GitHub issue triage environment for AI agent training</p>
+
+    <div class="status-bar">
+      <div class="status-pill"><span class="dot"></span> <strong>Running</strong> · HF Spaces</div>
+      <div class="status-pill">⚡ <strong>FastAPI</strong> + Uvicorn</div>
+      <div class="status-pill">🐳 <strong>Docker</strong> · python:3.11-slim</div>
+      <div class="status-pill">🤖 <strong>3 Tasks</strong> · easy → hard</div>
+    </div>
+  </header>
+
+  <!-- Scores -->
+  <div class="scores-section">
+    <div class="section-label">Baseline Scores — Llama-3.1-8B-Instruct</div>
+    <div class="score-grid">
+      <div class="score-card">
+        <div class="task-name">Easy</div>
+        <div class="score-val">0.75</div>
+        <div class="score-bar"><div class="score-bar-fill" style="width:75%"></div></div>
+      </div>
+      <div class="score-card">
+        <div class="task-name">Medium</div>
+        <div class="score-val">0.82</div>
+        <div class="score-bar"><div class="score-bar-fill" style="width:82%"></div></div>
+      </div>
+      <div class="score-card">
+        <div class="task-name">Hard</div>
+        <div class="score-val">0.86</div>
+        <div class="score-bar"><div class="score-bar-fill" style="width:86%"></div></div>
+      </div>
+      <div class="score-card overall">
+        <div class="task-name">Overall</div>
+        <div class="score-val">0.81</div>
+        <div class="score-bar"><div class="score-bar-fill" style="width:81%"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tasks -->
+  <div class="section-label">Tasks</div>
+  <div class="tasks-grid">
+    <div class="task-card">
+      <div class="task-difficulty diff-easy">Easy</div>
+      <h3>Basic Issue Classification</h3>
+      <p>Triage 3 clear-cut issues: a documentation typo, a feature request, and a user question.</p>
+      <div class="task-meta">Issues: <span>3</span> · Score range: <span>0.70 – 1.00</span></div>
+    </div>
+    <div class="task-card">
+      <div class="task-difficulty diff-medium">Medium</div>
+      <h3>Mixed Backlog Triage</h3>
+      <p>Handle bugs, a performance regression, and a duplicate. Identify the duplicate correctly.</p>
+      <div class="task-meta">Issues: <span>4</span> · Score range: <span>0.50 – 0.85</span></div>
+    </div>
+    <div class="task-card">
+      <div class="task-difficulty diff-hard">Hard</div>
+      <h3>Security Incident</h3>
+      <p>Escalate 2 security vulns + memory leak to CRITICAL under limited team capacity.</p>
+      <div class="task-meta">Issues: <span>5</span> · Score range: <span>0.30 – 0.75</span></div>
+    </div>
+  </div>
+
+  <!-- Endpoints -->
+  <div class="section-label">API Endpoints</div>
+  <div class="endpoints-grid">
+    <a class="endpoint" href="/docs" target="_blank">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/reset</span>
+      <span class="endpoint-desc">Start episode</span>
+    </a>
+    <a class="endpoint" href="/docs" target="_blank">
+      <span class="method post">POST</span>
+      <span class="endpoint-path">/step</span>
+      <span class="endpoint-desc">Take action</span>
+    </a>
+    <a class="endpoint" href="/state?task_id=easy" target="_blank">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/state</span>
+      <span class="endpoint-desc">Current state</span>
+    </a>
+    <a class="endpoint" href="/tasks" target="_blank">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/tasks</span>
+      <span class="endpoint-desc">List tasks</span>
+    </a>
+    <a class="endpoint" href="/health" target="_blank">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/health</span>
+      <span class="endpoint-desc">Health check</span>
+    </a>
+    <a class="endpoint" href="/docs" target="_blank">
+      <span class="method get">GET</span>
+      <span class="endpoint-path">/docs</span>
+      <span class="endpoint-desc">Interactive docs</span>
+    </a>
+  </div>
+
+  <!-- Live Test -->
+  <div class="live-test">
+    <h2>⚡ Live API Test</h2>
+    <div class="btn-group">
+      <button class="btn" onclick="testEndpoint('health')">GET /health</button>
+      <button class="btn" onclick="testEndpoint('reset-easy')">POST /reset easy</button>
+      <button class="btn" onclick="testEndpoint('reset-hard')">POST /reset hard</button>
+      <button class="btn" onclick="testEndpoint('tasks')">GET /tasks</button>
+      <button class="btn" onclick="testEndpoint('step')">POST /step</button>
+    </div>
+    <div class="response-label">Response</div>
+    <div class="response-box" id="response-box">// Click a button to test the live API</div>
+  </div>
+
+  <footer>
+    Built for the <a href="https://www.scaler.com/school-of-technology/meta-pytorch-hackathon" target="_blank">OpenEnv X SCALER</a> Hackathon ·
+    Team <strong>Axiom Minds</strong> ·
+    <a href="https://github.com/r-vb/bug-triage-env/blob/main/README.md" target="_blank">README.md</a> ·
+    <a href="https://github.com/r-vb/bug-triage-env" target="_blank">GitHub CodeBase</a>
+  </footer>
+
+</div>
+
+<script>
+  const BASE = '';
+
+  async function testEndpoint(type) {
+    const box = document.getElementById('response-box');
+    box.className = 'response-box loading';
+    box.textContent = '// Loading...';
+
+    try {
+      let res, data;
+
+      if (type === 'health') {
+        res = await fetch(BASE + '/health');
+      } else if (type === 'reset-easy') {
+        res = await fetch(BASE + '/reset', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({task_id: 'easy', seed: 42})
+        });
+      } else if (type === 'reset-hard') {
+        res = await fetch(BASE + '/reset', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({task_id: 'hard', seed: 42})
+        });
+      } else if (type === 'tasks') {
+        res = await fetch(BASE + '/tasks');
+      } else if (type === 'step') {
+        // First reset, then step
+        await fetch(BASE + '/reset', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({task_id: 'easy', seed: 42})
+        });
+        res = await fetch(BASE + '/step', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            task_id: 'easy',
+            action: {
+              issue_id: 1003,
+              priority: 'low',
+              label: 'documentation',
+              status: 'open',
+              assignee: 'alice',
+              comment: 'Minor README typo, quick fix.',
+              estimated_fix_hours: 0.5
+            }
+          })
+        });
+      }
+
+      data = await res.json();
+      box.className = 'response-box';
+      box.textContent = JSON.stringify(data, null, 2);
+    } catch (e) {
+      box.className = 'response-box error';
+      box.textContent = '// Error: ' + e.message;
+    }
+  }
+</script>
+</body>
+</html>
