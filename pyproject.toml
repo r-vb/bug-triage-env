@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "bug-triage-env"
+version = "1.0.0"
+description = "Real-world GitHub issue triage environment for AI agent training"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+  {name = "Axiom Minds"}
+]
+keywords = ["openenv", "bug-triage", "reinforcement-learning", "ai-agent"]
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.6",
+    "pydantic>=2.8.2",
+    "openai>=1.45.0",
+    "pyyaml>=6.0.2",
+    "httpx>=0.27.2",
+    "openenv-core>=0.2.0",
+]
+
+[project.scripts]
+server = "server.app:main"
+
+[project.urls]
+Homepage = "https://huggingface.co/spaces/r-vb/bug-triage-env"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["*.py"]

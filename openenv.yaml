@@ -1,0 +1,121 @@
+name: bug-triage-openenv
+version: "1.0.0"
+description: >
+  A real-world OpenEnv environment that simulates GitHub issue triage.
+  An AI agent acts as an engineering manager, processing a backlog of
+  GitHub issues and assigning priority, labels, status, and engineers.
+  Rewards are shaped around triage accuracy, SLA compliance, and team
+  capacity management.
+
+tags:
+  - openenv
+  - bug-triage
+  - software-engineering
+  - real-world
+  - nlp
+
+author: "Axiom Minds"
+license: MIT
+
+# ─── API spec ─────────────────────────────────────────────────────────────────
+api:
+  reset: POST /reset
+  step: POST /step
+  state: GET /state
+  tasks: GET /tasks
+  health: GET /health
+
+# ─── Action space ─────────────────────────────────────────────────────────────
+action_space:
+  type: object
+  fields:
+    issue_id:
+      type: integer
+      description: ID of the issue being triaged
+    priority:
+      type: enum
+      values: [critical, high, medium, low, wont_fix]
+    label:
+      type: enum
+      values: [bug, feature, performance, security, documentation, question, duplicate]
+    status:
+      type: enum
+      values: [open, in_progress, needs_info, closed]
+    assignee:
+      type: string
+      nullable: true
+      description: Engineer username to assign
+    comment:
+      type: string
+      nullable: true
+      description: Triage comment explaining the decision
+    estimated_fix_hours:
+      type: float
+      nullable: true
+
+# ─── Observation space ────────────────────────────────────────────────────────
+observation_space:
+  type: object
+  fields:
+    current_issue:
+      type: object
+      description: Full GitHub issue with title, body, comments, reactions, stack trace
+    inbox_size:
+      type: integer
+      description: Number of issues remaining to triage
+    triaged_count:
+      type: integer
+    team_capacity:
+      type: object
+      description: Map of engineer -> remaining hours this sprint
+    sla_breached_count:
+      type: integer
+      description: Number of critical/high issues that were under-prioritized
+    step_number:
+      type: integer
+    max_steps:
+      type: integer
+
+# ─── Reward ───────────────────────────────────────────────────────────────────
+reward:
+  range: [0.0, 1.0]
+  per_step: true
+  components:
+    priority_accuracy: weight 0.5
+    label_accuracy: weight 0.3
+    capacity_management: weight 0.1
+    comment_quality: weight 0.1
+    sla_penalty: up to -0.3 for missed critical/high issues
+
+# ─── Tasks ────────────────────────────────────────────────────────────────────
+tasks:
+  - id: easy
+    name: Basic Issue Classification
+    difficulty: easy
+    n_issues: 3
+    description: Classify clear-cut documentation, feature, and question issues
+
+  - id: medium
+    name: Mixed Backlog Triage
+    difficulty: medium
+    n_issues: 4
+    description: Handle bugs, performance issues, and a duplicate in a mixed backlog
+
+  - id: hard
+    name: Security Incident + Overloaded Team
+    difficulty: hard
+    n_issues: 5
+    description: Escalate security vulnerabilities and critical bugs under capacity constraints
+
+# ─── Infrastructure ───────────────────────────────────────────────────────────
+runtime:
+  port: 7860
+  memory: 2gb
+  vcpu: 2
+  framework: fastapi
+
+baseline_scores:
+  easy: 0.82
+  medium: 0.71
+  hard: 0.58
+  overall: 0.70
