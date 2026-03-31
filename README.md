@@ -1,12 +1,3 @@
----
-title: Bug Triage Openenv
-emoji: 🐛
-colorFrom: red
-colorTo: green
-sdk: docker
-pinned: false
----
-
 # 🐛 Bug Triage OpenEnv
 
 A real-world OpenEnv environment that simulates **GitHub issue triage** — one of the most common and high-value tasks in software engineering.
