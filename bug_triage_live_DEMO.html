@@ -1,0 +1,218 @@
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-sans); }
+  .demo { padding: 1rem 0; }
+  .controls { display: flex; gap: 8px; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
+  .task-btn { padding: 6px 14px; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-secondary); background: var(--color-background-primary); color: var(--color-text-primary); font-size: 13px; cursor: pointer; transition: all 0.15s; }
+  .task-btn.active { background: var(--color-background-info); color: var(--color-text-info); border-color: var(--color-border-info); }
+  .task-btn:hover:not(.active) { background: var(--color-background-secondary); }
+  .run-btn { padding: 6px 18px; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-secondary); background: var(--color-background-primary); color: var(--color-text-primary); font-size: 13px; cursor: pointer; font-weight: 500; margin-left: auto; }
+  .run-btn:hover { background: var(--color-background-secondary); }
+  .run-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .steps { display: flex; flex-direction: column; gap: 10px; }
+  .step-card { border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); overflow: hidden; }
+  .step-header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--color-background-secondary); }
+  .step-num { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 500; background: var(--color-background-tertiary); color: var(--color-text-secondary); flex-shrink: 0; }
+  .step-num.done { background: var(--color-background-success); color: var(--color-text-success); }
+  .step-title { font-size: 13px; font-weight: 500; color: var(--color-text-primary); }
+  .step-body { padding: 12px 14px; display: none; }
+  .step-body.show { display: block; }
+  .issue-title { font-size: 14px; font-weight: 500; color: var(--color-text-primary); margin-bottom: 4px; }
+  .issue-meta { font-size: 12px; color: var(--color-text-secondary); margin-bottom: 8px; }
+  .issue-body { font-size: 12px; color: var(--color-text-secondary); line-height: 1.5; padding: 8px; background: var(--color-background-secondary); border-radius: var(--border-radius-md); margin-bottom: 10px; }
+  .action-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+  .pill { font-size: 11px; padding: 3px 10px; border-radius: 100px; font-weight: 500; }
+  .pill.critical { background: #FCEBEB; color: #A32D2D; }
+  .pill.high { background: #FAEEDA; color: #854F0B; }
+  .pill.medium { background: #E6F1FB; color: #185FA5; }
+  .pill.low { background: #EAF3DE; color: #3B6D11; }
+  .pill.bug { background: #FCEBEB; color: #A32D2D; }
+  .pill.security { background: #FAEEDA; color: #854F0B; }
+  .pill.documentation { background: #EAF3DE; color: #3B6D11; }
+  .pill.feature { background: #EEEDFE; color: #534AB7; }
+  .pill.question { background: #E1F5EE; color: #0F6E56; }
+  .pill.duplicate { background: #F1EFE8; color: #5F5E5A; }
+  .pill.performance { background: #E6F1FB; color: #185FA5; }
+  .reward-row { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+  .reward-label { font-size: 12px; color: var(--color-text-secondary); }
+  .reward-bar-bg { flex: 1; height: 6px; background: var(--color-background-tertiary); border-radius: 3px; overflow: hidden; }
+  .reward-bar-fill { height: 100%; border-radius: 3px; transition: width 0.6s ease; }
+  .reward-val { font-size: 13px; font-weight: 500; min-width: 36px; text-align: right; }
+  .summary-card { border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 14px; display: none; }
+  .summary-card.show { display: block; }
+  .summary-title { font-size: 13px; font-weight: 500; margin-bottom: 12px; color: var(--color-text-primary); }
+  .score-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .score-cell { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 10px; text-align: center; }
+  .score-cell .s-label { font-size: 11px; color: var(--color-text-secondary); margin-bottom: 4px; }
+  .score-cell .s-val { font-size: 20px; font-weight: 500; color: var(--color-text-primary); }
+  .score-cell.overall .s-val { color: var(--color-text-success); }
+  .status { font-size: 12px; color: var(--color-text-secondary); padding: 4px 0; min-height: 20px; }
+</style>
+
+<div class="demo">
+  <div class="controls">
+    <button class="task-btn active" onclick="selectTask('easy')">Easy (3 issues)</button>
+    <button class="task-btn" onclick="selectTask('medium')">Medium (4 issues)</button>
+    <button class="task-btn" onclick="selectTask('hard')">Hard (5 issues)</button>
+    <button class="run-btn" id="run-btn" onclick="runDemo()">Run demo ↗</button>
+  </div>
+  <div class="status" id="status">Select a task and click Run demo</div>
+  <div class="steps" id="steps"></div>
+  <div class="summary-card" id="summary">
+    <div class="summary-title">Episode complete — score breakdown</div>
+    <div class="score-grid" id="score-grid"></div>
+  </div>
+</div>
+
+<script>
+const BASE = 'https://r-vb-bug-triage-env.hf.space';
+let currentTask = 'easy';
+let running = false;
+
+const DEMO_ACTIONS = {
+  easy: [
+    { issue_id: 1003, priority: 'low', label: 'documentation', status: 'open', assignee: 'alice', comment: 'Minor README typo, easy fix.', estimated_fix_hours: 0.5 },
+    { issue_id: 1005, priority: 'low', label: 'feature', status: 'open', assignee: null, comment: 'Nice to have dark mode, low urgency.', estimated_fix_hours: null },
+    { issue_id: 1007, priority: 'low', label: 'question', status: 'needs_info', assignee: null, comment: 'User question, answered in comments.', estimated_fix_hours: null },
+  ],
+  medium: [
+    { issue_id: 1001, priority: 'high', label: 'bug', status: 'open', assignee: 'carol', comment: 'Login broken with special chars, affects onboarding.', estimated_fix_hours: 4 },
+    { issue_id: 1004, priority: 'high', label: 'performance', status: 'open', assignee: 'bob', comment: 'N+1 query causing 45s load, enterprise clients affected.', estimated_fix_hours: 6 },
+    { issue_id: 1006, priority: 'medium', label: 'bug', status: 'open', assignee: 'alice', comment: 'Email invites broken since Jan 12.', estimated_fix_hours: 3 },
+    { issue_id: 1009, priority: 'low', label: 'duplicate', status: 'closed', assignee: null, comment: 'Duplicate of #987, closing.', estimated_fix_hours: null },
+  ],
+  hard: [
+    { issue_id: 1002, priority: 'critical', label: 'security', status: 'in_progress', assignee: 'carol', comment: 'SQL injection, CVE assigned. Immediate patch required.', estimated_fix_hours: 8 },
+    { issue_id: 1008, priority: 'critical', label: 'bug', status: 'in_progress', assignee: 'alice', comment: 'Memory leak crashing prod every 24h, $2k incident cost.', estimated_fix_hours: 8 },
+    { issue_id: 1010, priority: 'critical', label: 'security', status: 'in_progress', assignee: 'bob', comment: 'Rate limiting broken, API abuse possible.', estimated_fix_hours: 6 },
+    { issue_id: 1001, priority: 'high', label: 'bug', status: 'open', assignee: 'dave', comment: 'Login blocked for users with special char passwords.', estimated_fix_hours: 4 },
+    { issue_id: 1004, priority: 'high', label: 'performance', status: 'open', assignee: null, comment: 'Performance regression, team at capacity.', estimated_fix_hours: null },
+  ]
+};
+
+function selectTask(t) {
+  currentTask = t;
+  document.querySelectorAll('.task-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('steps').innerHTML = '';
+  document.getElementById('summary').classList.remove('show');
+  document.getElementById('status').textContent = 'Select a task and click Run demo';
+}
+
+function rewardColor(r) {
+  if (r >= 0.8) return '#3B6D11';
+  if (r >= 0.5) return '#854F0B';
+  return '#A32D2D';
+}
+
+function rewardBg(r) {
+  if (r >= 0.8) return '#639922';
+  if (r >= 0.5) return '#EF9F27';
+  return '#E24B4A';
+}
+
+async function runDemo() {
+  if (running) return;
+  running = true;
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true;
+  btn.textContent = 'Running...';
+  document.getElementById('steps').innerHTML = '';
+  document.getElementById('summary').classList.remove('show');
+  document.getElementById('status').textContent = 'Resetting environment...';
+
+  const actions = DEMO_ACTIONS[currentTask];
+  const rewards = [];
+
+  try {
+    await fetch(BASE + '/reset', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({task_id: currentTask, seed: 42})
+    });
+
+    for (let i = 0; i < actions.length; i++) {
+      const action = actions[i];
+      document.getElementById('status').textContent = `Step ${i+1}/${actions.length} — triaging issue #${action.issue_id}...`;
+
+      const res = await fetch(BASE + '/step', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({task_id: currentTask, action})
+      });
+      const data = await res.json();
+      const issue = i === 0 ? (await (await fetch(BASE + '/reset', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({task_id: currentTask, seed: 42})
+      })).json()).current_issue : null;
+
+      rewards.push(data.reward);
+      renderStep(i+1, action, data, actions.length);
+      await new Promise(r => setTimeout(r, 400));
+    }
+
+    const avg = rewards.reduce((a,b)=>a+b,0)/rewards.length;
+    renderSummary(rewards, avg);
+    document.getElementById('status').textContent = `Episode complete — overall score: ${avg.toFixed(4)}`;
+
+  } catch(e) {
+    document.getElementById('status').textContent = 'Error: ' + e.message;
+  }
+
+  running = false;
+  btn.disabled = false;
+  btn.textContent = 'Run again ↗';
+}
+
+function renderStep(n, action, data, total) {
+  const stepsEl = document.getElementById('steps');
+  const div = document.createElement('div');
+  div.className = 'step-card';
+  const r = data.reward;
+  const done = data.done;
+  div.innerHTML = `
+    <div class="step-header">
+      <div class="step-num done">${n}</div>
+      <div class="step-title">Issue #${action.issue_id} triaged</div>
+      <div style="margin-left:auto;font-size:12px;color:var(--color-text-secondary)">step ${n}/${total}</div>
+    </div>
+    <div class="step-body show">
+      <div class="action-row">
+        <span style="font-size:12px;color:var(--color-text-secondary)">Priority:</span>
+        <span class="pill ${action.priority}">${action.priority}</span>
+        <span style="font-size:12px;color:var(--color-text-secondary)">Label:</span>
+        <span class="pill ${action.label}">${action.label}</span>
+        ${action.assignee ? `<span style="font-size:12px;color:var(--color-text-secondary)">→ ${action.assignee}</span>` : ''}
+      </div>
+      <div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:8px;font-style:italic">"${action.comment}"</div>
+      <div class="reward-row">
+        <span class="reward-label">Reward</span>
+        <div class="reward-bar-bg">
+          <div class="reward-bar-fill" style="width:${(r*100).toFixed(0)}%;background:${rewardBg(r)}"></div>
+        </div>
+        <span class="reward-val" style="color:${rewardColor(r)}">${r.toFixed(4)}</span>
+      </div>
+      <div style="font-size:11px;color:var(--color-text-secondary);margin-top:6px">
+        SLA breaches: ${data.info.sla_breaches} · Total reward so far: ${data.info.total_reward.toFixed(4)}
+      </div>
+    </div>
+  `;
+  stepsEl.appendChild(div);
+}
+
+function renderSummary(rewards, avg) {
+  const grid = document.getElementById('score-grid');
+  const labels = ['Step 1','Step 2','Step 3','Step 4','Step 5'].slice(0, rewards.length);
+  let html = rewards.map((r,i) => `
+    <div class="score-cell">
+      <div class="s-label">${labels[i]}</div>
+      <div class="s-val" style="color:${rewardColor(r)}">${r.toFixed(2)}</div>
+    </div>
+  `).join('');
+  html += `<div class="score-cell overall" style="grid-column: 1/-1;">
+    <div class="s-label">overall</div>
+    <div class="s-val">${avg.toFixed(4)}</div>
+  </div>`;
+  grid.innerHTML = html;
+  document.getElementById('summary').classList.add('show');
+}
+</script>
