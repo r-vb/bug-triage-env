@@ -185,3 +185,5 @@ bug-triage-env/
 ---
 
 *Built for the OpenEnv Hackathon by Team Axiom Minds.*
+
+![Axiom Minds](https://cdn-avatars.huggingface.co/v1/production/uploads/69c433c26aa4fa149f7148fa/cfb8Gv0t2JhKie0Wyb8JY.png)
