@@ -1,4 +1,5 @@
 __pycache__/
 .venv/
 *.pyc
-bug_triage_live_DEMO.html
+.env
+bug_triage_live_demo.html
