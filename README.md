@@ -121,6 +121,15 @@ python server.py
 # Server starts at http://localhost:7860
 ```
 
+### Local Environment Variables
+Create a local `.env` file for baseline inference:
+
+```bash
+API_BASE_URL=https://router.huggingface.co/v1
+MODEL_NAME=meta-llama/Llama-3.1-8B-Instruct
+HF_TOKEN=your_hf_token
+```
+
 ### Docker
 ```bash
 docker build -t bug-triage-env .
@@ -129,12 +138,20 @@ docker run -p 7860:7860 bug-triage-env
 
 ### Run Baseline Inference
 ```bash
-export API_BASE_URL=https://router.huggingface.co/v1
-export MODEL_NAME=meta-llama/Llama-3.1-8B-Instruct
-export HF_TOKEN=your_hf_token
-
 python inference.py
 ```
+
+The script reads `API_BASE_URL`, `MODEL_NAME`, and `HF_TOKEN` from environment variables and emits structured stdout logs in `[START]`, `[STEP]`, and `[END]` format.
+
+### Validate Before Submission
+```bash
+./pre_validate.sh https://r-vb-bug-triage-env.hf.space/
+```
+
+This checks:
+- the deployed Space responds to `POST /reset`
+- `docker build` succeeds
+- `openenv validate` passes
 
 ---
 
@@ -144,10 +161,10 @@ Measured with `meta-llama/Llama-3.1-8B-Instruct` via HuggingFace Router at tempe
 
 | Task | Score |
 |------|-------|
-| easy | 0.7511 |
-| medium | 0.8192 |
-| hard | 0.8600 |
-| **overall** | **0.8101** |
+| easy | 0.6667 |
+| medium | 0.8867 |
+| hard | 0.7940 |
+| **overall** | **0.7825** |
 
 ---
 
@@ -179,11 +196,11 @@ bug-triage-env/
 - ✅ Dockerfile builds and runs
 - ✅ 3+ tasks with graders scoring 0.0–1.0
 - ✅ `inference.py` in root, uses OpenAI client, reads env vars
+- ✅ `inference.py` emits structured `[START]` / `[STEP]` / `[END]` logs
+- ✅ `pre_validate.sh` passes against the deployed HF Space
 - ✅ Graders are deterministic (seed-based)
 - ✅ Runtime < 20min, runs on 2vCPU / 8GB
 
 ---
 
 *Built for the OpenEnv Hackathon by Team Axiom Minds.*
-
-![Axiom Minds](https://cdn-avatars.huggingface.co/v1/production/uploads/69c433c26aa4fa149f7148fa/cfb8Gv0t2JhKie0Wyb8JY.png)
