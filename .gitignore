@@ -3,11 +3,3 @@ __pycache__/
 .venv/
 *.pyc
 .env
-
-# Ignore generated files and presentations
-PROJECT_OVERVIEW.md
-bug-triage-demo-day-presentation.pptx
-bug-triage-project-presentation.pptx
-bug_triage_live_demo.html
-generate_demo_day_ppt.ps1
-generate_ppt.ps1
