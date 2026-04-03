@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Bug Triage OpenEnv</title>
+<link rel="icon" type="image/png" href="https://cdn-avatars.huggingface.co/v1/production/uploads/69c433c26aa4fa149f7148fa/cfb8Gv0t2JhKie0Wyb8JY.png">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -162,6 +163,32 @@
 
   .status-pill strong { color: var(--text); }
 
+  .hero-links {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 0 0 32px;
+    animation: fadeDown 0.6s 0.25s ease both;
+  }
+
+  .hero-link {
+    text-decoration: none;
+    color: var(--text);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 12px;
+    transition: border-color 0.2s, transform 0.2s, color 0.2s;
+  }
+
+  .hero-link:hover {
+    border-color: rgba(63,185,80,0.4);
+    color: var(--green);
+    transform: translateY(-1px);
+  }
+
   /* ── Score cards ── */
   .scores-section {
     margin-bottom: 56px;
@@ -243,6 +270,8 @@
   }
 
   .score-card.overall .score-val { font-size: 40px; }
+  .score-card.is-loading .score-val,
+  .score-card.is-loading .task-name { color: var(--text-dim); }
 
   .score-bar {
     height: 3px;
@@ -316,6 +345,9 @@
     line-height: 1.6;
     margin-bottom: 14px;
   }
+
+  .task-card.is-loading p,
+  .task-card.is-loading h3 { color: var(--text-dim); }
 
   .task-meta {
     font-size: 10px;
@@ -477,61 +509,56 @@
     <h1>🐛 Bug Triage<br><span>OpenEnv</span></h1>
     <p class="subtitle">Real-world GitHub issue triage environment for AI agent training</p>
 
+    <div class="hero-links">
+      <a class="hero-link" href="/docs" target="_blank">Open API Docs</a>
+      <a class="hero-link" href="/tasks" target="_blank">View Tasks</a>
+      <a class="hero-link" href="/health" target="_blank">Health Check</a>
+    </div>
+
     <div class="status-bar">
-      <div class="status-pill"><span class="dot"></span> <strong>Running</strong> · HF Spaces</div>
+      <div class="status-pill" id="runtime-status"><span class="dot"></span> <strong>Checking</strong> · HF Spaces</div>
       <div class="status-pill">⚡ <strong>FastAPI</strong> + Uvicorn</div>
       <div class="status-pill">🐳 <strong>Docker</strong> · python:3.11-slim</div>
-      <div class="status-pill">🤖 <strong>3 Tasks</strong> · easy → hard</div>
+      <div class="status-pill" id="task-summary">🤖 <strong>3 Tasks</strong> · easy → medium → hard</div>
+      <div class="status-pill">✅ <strong>Validated</strong> · openenv + pre-submit</div>
     </div>
   </header>
 
   <!-- Scores -->
   <div class="scores-section">
     <div class="section-label">Baseline Scores — Llama-3.1-8B-Instruct</div>
-    <div class="score-grid">
-      <div class="score-card">
+    <div class="score-grid" id="score-grid">
+      <div class="score-card is-loading">
         <div class="task-name">Easy</div>
-        <div class="score-val">0.75</div>
-        <div class="score-bar"><div class="score-bar-fill" style="width:75%"></div></div>
+        <div class="score-val">--</div>
+        <div class="score-bar"><div class="score-bar-fill" style="width:0%"></div></div>
       </div>
-      <div class="score-card">
+      <div class="score-card is-loading">
         <div class="task-name">Medium</div>
-        <div class="score-val">0.82</div>
-        <div class="score-bar"><div class="score-bar-fill" style="width:82%"></div></div>
+        <div class="score-val">--</div>
+        <div class="score-bar"><div class="score-bar-fill" style="width:0%"></div></div>
       </div>
-      <div class="score-card">
+      <div class="score-card is-loading">
         <div class="task-name">Hard</div>
-        <div class="score-val">0.86</div>
-        <div class="score-bar"><div class="score-bar-fill" style="width:86%"></div></div>
+        <div class="score-val">--</div>
+        <div class="score-bar"><div class="score-bar-fill" style="width:0%"></div></div>
       </div>
-      <div class="score-card overall">
+      <div class="score-card overall is-loading">
         <div class="task-name">Overall</div>
-        <div class="score-val">0.81</div>
-        <div class="score-bar"><div class="score-bar-fill" style="width:81%"></div></div>
+        <div class="score-val">--</div>
+        <div class="score-bar"><div class="score-bar-fill" style="width:0%"></div></div>
       </div>
     </div>
   </div>
 
   <!-- Tasks -->
   <div class="section-label">Tasks</div>
-  <div class="tasks-grid">
-    <div class="task-card">
-      <div class="task-difficulty diff-easy">Easy</div>
-      <h3>Basic Issue Classification</h3>
-      <p>Triage 3 clear-cut issues: a documentation typo, a feature request, and a user question.</p>
-      <div class="task-meta">Issues: <span>3</span> · Score range: <span>0.70 – 1.00</span></div>
-    </div>
-    <div class="task-card">
-      <div class="task-difficulty diff-medium">Medium</div>
-      <h3>Mixed Backlog Triage</h3>
-      <p>Handle bugs, a performance regression, and a duplicate. Identify the duplicate correctly.</p>
-      <div class="task-meta">Issues: <span>4</span> · Score range: <span>0.50 – 0.85</span></div>
-    </div>
-    <div class="task-card">
-      <div class="task-difficulty diff-hard">Hard</div>
-      <h3>Security Incident</h3>
-      <p>Escalate 2 security vulns + memory leak to CRITICAL under limited team capacity.</p>
-      <div class="task-meta">Issues: <span>5</span> · Score range: <span>0.30 – 0.75</span></div>
+  <div class="tasks-grid" id="tasks-grid">
+    <div class="task-card is-loading">
+      <div class="task-difficulty diff-easy">Loading</div>
+      <h3>Fetching tasks</h3>
+      <p>Pulling task definitions from the live API.</p>
+      <div class="task-meta">Issues: <span>--</span> · Score range: <span>--</span></div>
     </div>
   </div>
 
@@ -596,6 +623,72 @@
 <script>
   const BASE = '';
 
+  function difficultyClass(difficulty) {
+    return `diff-${difficulty || 'easy'}`;
+  }
+
+  function formatScore(value) {
+    return typeof value === 'number' ? value.toFixed(2) : '--';
+  }
+
+  function scoreWidth(value) {
+    return typeof value === 'number' ? `${Math.max(0, Math.min(100, value * 100))}%` : '0%';
+  }
+
+  function renderScores(scores) {
+    const order = ['easy', 'medium', 'hard', 'overall'];
+    const grid = document.getElementById('score-grid');
+    grid.innerHTML = order.map((key) => {
+      const value = typeof scores[key] === 'number' ? scores[key] : null;
+      const label = key.charAt(0).toUpperCase() + key.slice(1);
+      const extraClass = key === 'overall' ? ' overall' : '';
+      return `
+        <div class="score-card${extraClass}">
+          <div class="task-name">${label}</div>
+          <div class="score-val">${formatScore(value)}</div>
+          <div class="score-bar"><div class="score-bar-fill" style="width:${scoreWidth(value)}"></div></div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function renderTasks(tasks) {
+    const grid = document.getElementById('tasks-grid');
+    grid.innerHTML = tasks.map((task) => `
+      <div class="task-card">
+        <div class="task-difficulty ${difficultyClass(task.difficulty)}">${task.difficulty}</div>
+        <h3>${task.name}</h3>
+        <p>${task.description}</p>
+        <div class="task-meta">Issues: <span>${task.issue_ids ? task.issue_ids.length : task.n_issues || '--'}</span> · Score range: <span>${task.expected_score_range ? `${task.expected_score_range[0].toFixed(2)} – ${task.expected_score_range[1].toFixed(2)}` : 'See docs'}</span></div>
+      </div>
+    `).join('');
+
+    const taskSummary = document.getElementById('task-summary');
+    taskSummary.innerHTML = `🤖 <strong>${tasks.length} Tasks</strong> · ${tasks.map((task) => task.difficulty).join(' → ')}`;
+  }
+
+  async function hydrateHomepage() {
+    const runtimeStatus = document.getElementById('runtime-status');
+
+    try {
+      const [healthRes, tasksRes, scoresRes] = await Promise.all([
+        fetch(BASE + '/health'),
+        fetch(BASE + '/tasks'),
+        fetch(BASE + '/baseline-scores')
+      ]);
+
+      const health = await healthRes.json();
+      const tasksPayload = await tasksRes.json();
+      const scoresPayload = await scoresRes.json();
+
+      runtimeStatus.innerHTML = `<span class="dot"></span> <strong>${health.status === 'ok' ? 'Running' : 'Degraded'}</strong> · HF Spaces`;
+      renderTasks(tasksPayload.tasks || []);
+      renderScores(scoresPayload.scores || {});
+    } catch (error) {
+      runtimeStatus.innerHTML = `<span class="dot"></span> <strong>Running</strong> · HF Spaces`;
+    }
+  }
+
   async function testEndpoint(type) {
     const box = document.getElementById('response-box');
     box.className = 'response-box loading';
@@ -653,6 +746,8 @@
       box.textContent = '// Error: ' + e.message;
     }
   }
+
+  hydrateHomepage();
 </script>
 </body>
 </html>

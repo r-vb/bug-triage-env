@@ -12,7 +12,7 @@ from tasks import TASKS
 
 app = FastAPI(
     title="Bug Triage OpenEnv",
-    version="1.0.1",
+    version="1.0.0",
 )
 
 app.add_middleware(
@@ -29,6 +29,20 @@ def _get_env(task_id: str) -> BugTriageEnv:
     if task_id not in _envs:
         raise HTTPException(status_code=404, detail="Call /reset first")
     return _envs[task_id]
+
+
+def _read_baseline_scores() -> dict:
+    scores_path = os.path.join(os.path.dirname(__file__), "baseline_scores.json")
+    if not os.path.exists(scores_path):
+        return {}
+
+    try:
+        with open(scores_path, encoding="utf-8") as f:
+            import json
+
+            return json.load(f)
+    except Exception:
+        return {}
 
 
 # ─── Schemas ──────────────────────────────────────────────────────────────────
@@ -128,6 +142,11 @@ def state(task_id: str = "easy"):
 @app.get("/tasks")
 def list_tasks():
     return {"tasks": list(TASKS.values())}
+
+
+@app.get("/baseline-scores")
+def baseline_scores():
+    return {"scores": _read_baseline_scores()}
 
 
 # ─── Run ──────────────────────────────────────────────────────────────────────

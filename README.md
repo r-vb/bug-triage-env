@@ -163,8 +163,8 @@ Measured with `meta-llama/Llama-3.1-8B-Instruct` via HuggingFace Router at tempe
 |------|-------|
 | easy | 0.6667 |
 | medium | 0.8867 |
-| hard | 0.7940 |
-| **overall** | **0.7825** |
+| hard | 0.8440 |
+| **overall** | **0.7991** |
 
 ---
 

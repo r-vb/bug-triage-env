@@ -3,9 +3,11 @@ import os
 import time
 from typing import List
 
+from fastapi.testclient import TestClient
 from openai import OpenAI
 
-from environment import Action, BugTriageEnv, IssueLabel, IssueStatus, Observation, Priority
+from environment import Action, IssueLabel, IssueStatus, Observation, Priority
+from server import app
 
 
 BENCHMARK = "bug-triage-openenv"
@@ -128,6 +130,10 @@ def safe_parse_action(raw: str, obs: Observation) -> Action:
         )
 
 
+def parse_observation(payload: dict) -> Observation:
+    return Observation.model_validate(payload)
+
+
 def get_model_action(obs: Observation, task_id: str, step: int, history: List[str]) -> Action:
     prompt = "\n\n".join(
         [
@@ -168,17 +174,21 @@ def main() -> None:
     global_step = 0
     success = False
     start_time = time.time()
+    client_env = TestClient(app)
 
     log_start(task=TASK_NAME, env=BENCHMARK, model=MODEL_NAME)
 
     try:
         for task_id in TASK_IDS:
-            env = BugTriageEnv(task_id=task_id, seed=42)
             task_rewards: List[float] = []
-            obs = env.reset()
+            reset_res = client_env.post("/reset", json={"task_id": task_id, "seed": 42})
+            reset_res.raise_for_status()
+            obs = parse_observation(reset_res.json())
+            done = False
+            info = None
 
             try:
-                while not env.state()["done"]:
+                while not done:
                     if time.time() - start_time > MAX_RUNTIME_SECONDS:
                         raise TimeoutError("Inference exceeded runtime limit")
 
@@ -186,8 +196,16 @@ def main() -> None:
                     action = get_model_action(obs, task_id, global_step, history)
                     action_summary = summarize_action(task_id, action)
 
-                    next_obs, reward, done, info = env.step(action)
-                    reward = reward or 0.0
+                    step_res = client_env.post(
+                        "/step",
+                        json={"task_id": task_id, "action": action.model_dump()},
+                    )
+                    step_res.raise_for_status()
+                    step_payload = step_res.json()
+                    next_obs = parse_observation(step_payload["observation"])
+                    reward = step_payload["reward"] or 0.0
+                    done = bool(step_payload["done"])
+                    info = step_payload["info"]
 
                     rewards.append(reward)
                     task_rewards.append(reward)
@@ -209,7 +227,7 @@ def main() -> None:
                     if done:
                         break
 
-                task_score = info.total_reward if task_rewards else 0.0
+                task_score = info["total_reward"] if task_rewards and info else 0.0
                 task_scores[task_id] = round(max(0.0, min(1.0, task_score)), 4)
 
             except Exception as exc:
@@ -223,8 +241,7 @@ def main() -> None:
                 )
 
             finally:
-                # Keep state isolated across tasks.
-                del env
+                pass
 
         overall = sum(task_scores.values()) / len(TASK_IDS)
         overall = round(max(0.0, min(1.0, overall)), 4)

@@ -82,6 +82,7 @@ class EnvInfo(BaseModel):
     total_reward: float
     triaged_issues: list[dict]
     sla_breaches: int
+    last_reward: Optional[Reward] = None
 
 
 # ─── Issue Bank ───────────────────────────────────────────────────────────────
@@ -248,7 +249,7 @@ GROUND_TRUTH = {
     1007: {"priority": Priority.LOW, "label": IssueLabel.QUESTION},
     1008: {"priority": Priority.CRITICAL, "label": IssueLabel.BUG},
     1009: {"priority": Priority.LOW, "label": IssueLabel.DUPLICATE},
-    1010: {"priority": Priority.HIGH, "label": IssueLabel.SECURITY},
+    1010: {"priority": Priority.CRITICAL, "label": IssueLabel.SECURITY},
 }
 
 PRIORITY_ORDER = [Priority.CRITICAL, Priority.HIGH, Priority.MEDIUM, Priority.LOW, Priority.WONT_FIX]
@@ -299,6 +300,10 @@ class BugTriageEnv:
             raise RuntimeError("Episode is done. Call reset() first.")
 
         issue = self._state["inbox"][0]
+        if action.issue_id != issue["id"]:
+            raise RuntimeError(
+                f"Action issue_id {action.issue_id} does not match current issue {issue['id']}"
+            )
         reward_breakdown = {}
 
         # ── Priority accuracy ──────────────────────────────────────
@@ -344,6 +349,11 @@ class BugTriageEnv:
 
         total_reward = sum(reward_breakdown.values())
         total_reward = max(0.0, min(1.0, total_reward))
+        reward_obj = Reward(
+            value=total_reward,
+            breakdown=reward_breakdown,
+            message=f"Issue {issue['id']} triaged with reward {total_reward:.4f}",
+        )
 
         # ── Advance state ──────────────────────────────────────────
         self._state["inbox"].pop(0)
@@ -364,6 +374,7 @@ class BugTriageEnv:
             total_reward=self._state["total_reward"] / max(1, self._state["step"]),
             triaged_issues=self._state["triaged"],
             sla_breaches=self._state["sla_breached"],
+            last_reward=reward_obj,
         )
 
         return obs, total_reward, done, info

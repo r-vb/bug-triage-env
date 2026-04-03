@@ -2,120 +2,211 @@ name: bug-triage-openenv
 version: "1.0.0"
 description: >
   A real-world OpenEnv environment that simulates GitHub issue triage.
-  An AI agent acts as an engineering manager, processing a backlog of
-  GitHub issues and assigning priority, labels, status, and engineers.
-  Rewards are shaped around triage accuracy, SLA compliance, and team
-  capacity management.
+  An AI agent acts as an engineering manager processing a backlog of
+  GitHub issues and assigning priority, label, status, assignee,
+  estimated fix hours, and triage rationale while managing team
+  capacity and SLA compliance.
 
 tags:
   - openenv
   - bug-triage
   - software-engineering
-  - real-world
-  - nlp
+  - ai-agents
+  - reinforcement-learning
+  - fastapi
 
 author: "Axiom Minds"
 license: MIT
+homepage: "https://huggingface.co/spaces/r-vb/bug-triage-env"
 
-# ─── API spec ─────────────────────────────────────────────────────────────────
 api:
-  reset: POST /reset
-  step: POST /step
-  state: GET /state
-  tasks: GET /tasks
-  health: GET /health
+  root: "GET /"
+  reset: "POST /reset"
+  step: "POST /step"
+  state: "GET /state"
+  tasks: "GET /tasks"
+  health: "GET /health"
+  baseline_scores: "GET /baseline-scores"
+  docs: "GET /docs"
 
-# ─── Action space ─────────────────────────────────────────────────────────────
 action_space:
   type: object
+  description: Structured triage decision submitted for the current issue.
   fields:
     issue_id:
       type: integer
-      description: ID of the issue being triaged
+      description: ID of the issue being triaged.
     priority:
       type: enum
-      values: [critical, high, medium, low, wont_fix]
+      values:
+        - critical
+        - high
+        - medium
+        - low
+        - wont_fix
+      description: Priority level assigned to the issue.
     label:
       type: enum
-      values: [bug, feature, performance, security, documentation, question, duplicate]
+      values:
+        - bug
+        - feature
+        - performance
+        - security
+        - documentation
+        - question
+        - duplicate
+      description: Issue classification label.
     status:
       type: enum
-      values: [open, in_progress, needs_info, closed]
+      values:
+        - open
+        - in_progress
+        - needs_info
+        - closed
+      description: Triage status chosen by the agent.
     assignee:
       type: string
       nullable: true
-      description: Engineer username to assign
+      description: Engineer username to assign, if any.
     comment:
       type: string
       nullable: true
-      description: Triage comment explaining the decision
+      description: Brief triage rationale.
     estimated_fix_hours:
       type: float
       nullable: true
+      description: Estimated engineering effort in hours.
 
-# ─── Observation space ────────────────────────────────────────────────────────
 observation_space:
   type: object
+  description: Current issue plus backlog and team context.
   fields:
     current_issue:
       type: object
-      description: Full GitHub issue with title, body, comments, reactions, stack trace
+      description: >
+        Full GitHub issue payload including title, body, author, comments,
+        reactions, creation time, affected users, stack trace, and
+        reproducibility signal when available.
     inbox_size:
       type: integer
-      description: Number of issues remaining to triage
+      description: Number of issues remaining in the current task.
     triaged_count:
       type: integer
+      description: Number of issues already triaged in the episode.
     team_capacity:
       type: object
-      description: Map of engineer -> remaining hours this sprint
+      description: Map of engineer username to remaining available hours.
     sla_breached_count:
       type: integer
-      description: Number of critical/high issues that were under-prioritized
+      description: Count of critical or high issues that were under-prioritized.
     step_number:
       type: integer
+      description: Current step index in the episode.
     max_steps:
       type: integer
+      description: Total number of issues in the selected task.
 
-# ─── Reward ───────────────────────────────────────────────────────────────────
 reward:
   range: [0.0, 1.0]
   per_step: true
+  description: >
+    Step reward combines triage correctness with practical operational
+    behavior. Rewards are clipped to the range [0.0, 1.0].
   components:
-    priority_accuracy: weight 0.5
-    label_accuracy: weight 0.3
-    capacity_management: weight 0.1
-    comment_quality: weight 0.1
-    sla_penalty: up to -0.3 for missed critical/high issues
+    priority_accuracy:
+      weight: 0.5
+      description: Exact match gets full credit, close priority misses get partial credit.
+    label_accuracy:
+      weight: 0.3
+      description: Correct issue label gets full credit.
+    capacity_management:
+      weight: 0.1
+      description: Rewards valid assignee selection within remaining team capacity.
+    comment_quality:
+      weight: 0.1
+      description: Rewards clear, substantive triage rationale.
+    sla_penalty:
+      weight: -0.3
+      description: Applied when a critical or high-priority issue is under-prioritized.
 
-# ─── Tasks ────────────────────────────────────────────────────────────────────
 tasks:
   - id: easy
     name: Basic Issue Classification
     difficulty: easy
     n_issues: 3
-    description: Classify clear-cut documentation, feature, and question issues
+    issue_ids:
+      - 1003
+      - 1005
+      - 1007
+    description: >
+      Triage three straightforward issues: a documentation fix, a feature
+      request, and a user question.
+    expected_score_range: [0.7, 1.0]
+    success_criteria: >
+      All issues labeled correctly and priorities kept within one level of
+      ground truth.
 
   - id: medium
     name: Mixed Backlog Triage
     difficulty: medium
     n_issues: 4
-    description: Handle bugs, performance issues, and a duplicate in a mixed backlog
+    issue_ids:
+      - 1001
+      - 1004
+      - 1006
+      - 1009
+    description: >
+      Triage a mixed backlog containing real bugs, a performance regression,
+      a broken email flow, and a duplicate issue.
+    expected_score_range: [0.5, 0.85]
+    success_criteria: >
+      Identify the duplicate correctly, keep the email bug at medium or
+      higher priority, and avoid overloading engineers.
 
   - id: hard
     name: Security Incident + Overloaded Team
     difficulty: hard
     n_issues: 5
-    description: Escalate security vulnerabilities and critical bugs under capacity constraints
+    issue_ids:
+      - 1002
+      - 1008
+      - 1010
+      - 1001
+      - 1004
+    description: >
+      Triage two security vulnerabilities, a critical memory leak, and other
+      high-impact issues while managing limited team capacity.
+    expected_score_range: [0.3, 0.75]
+    success_criteria: >
+      Security vulnerabilities escalated correctly, critical incidents
+      protected from under-prioritization, and team capacity respected.
 
-# ─── Infrastructure ───────────────────────────────────────────────────────────
 runtime:
-  port: 7860
-  memory: 2gb
-  vcpu: 2
   framework: fastapi
+  entrypoint: "python server.py"
+  port: 7860
+  python: ">=3.10"
+  memory: "2gb"
+  vcpu: 2
+  docker:
+    base_image: "python:3.11-slim"
+  dependencies:
+    - fastapi>=0.115.0
+    - uvicorn[standard]>=0.30.6
+    - pydantic>=2.8.2
+    - openai>=1.45.0
+    - pyyaml>=6.0.2
+    - httpx>=0.27.2
+    - openenv-core>=0.2.0
+
+baseline:
+  model: "meta-llama/Llama-3.1-8B-Instruct"
+  provider: "Hugging Face Router"
+  temperature: 0.0
+  source_file: "baseline_scores.json"
 
 baseline_scores:
-  easy: 0.82
-  medium: 0.71
-  hard: 0.58
-  overall: 0.70
+  easy: 0.6667
+  medium: 0.8867
+  hard: 0.8440
+  overall: 0.7991
