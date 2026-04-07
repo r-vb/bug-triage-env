@@ -7,7 +7,7 @@ import uvicorn
 import os
 
 from environment import BugTriageEnv, Action, Observation, EnvInfo
-from tasks import TASKS
+from tasks import TASKS, TASK_LIST, TASK_COUNT, TASKS_WITH_GRADERS, GRADER_SPECS
 
 app = FastAPI(
     title="Bug Triage OpenEnv",
@@ -45,18 +45,15 @@ def _read_baseline_scores() -> dict:
 
 
 def _task_payloads() -> list[dict]:
-    return list(TASKS.values())
+    return TASK_LIST
 
 
 def _grader_registry() -> dict[str, list[dict]]:
-    return {
-        task_id: task.get("graders", [])
-        for task_id, task in TASKS.items()
-    }
+    return GRADER_SPECS
 
 
 def _tasks_with_graders() -> int:
-    return sum(1 for task in TASKS.values() if task.get("graders"))
+    return TASKS_WITH_GRADERS
 
 
 # ─── Schemas ──────────────────────────────────────────────────────────────────
@@ -109,7 +106,7 @@ def metadata():
             "A real-world OpenEnv environment that simulates GitHub issue triage "
             "with three deterministic graded tasks."
         ),
-        "task_count": len(TASKS),
+        "task_count": TASK_COUNT,
         "tasks_with_graders": _tasks_with_graders(),
         "tasks": _task_payloads(),
         "graders": _grader_registry(),
@@ -208,9 +205,9 @@ def state(task_id: str = "easy"):
 def list_tasks():
     return {
         "tasks": _task_payloads(),
-        "count": len(TASKS),
+        "count": TASK_COUNT,
         "tasks_with_graders": _tasks_with_graders(),
-        "all_have_graders": _tasks_with_graders() == len(TASKS),
+        "all_have_graders": _tasks_with_graders() == TASK_COUNT,
         "graders": _grader_registry(),
     }
 

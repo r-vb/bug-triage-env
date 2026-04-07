@@ -19,6 +19,7 @@ TASKS = {
             "label and assign priority to clearly-typed issues with no ambiguity."
         ),
         "difficulty": "easy",
+        "n_issues": 3,
         "expected_score_range": [0.7, 1.0],
         "issue_ids": [1003, 1005, 1007],
         "success_criteria": (
@@ -43,6 +44,7 @@ TASKS = {
             "over-prioritizing it, while catching the broken email flow."
         ),
         "difficulty": "medium",
+        "n_issues": 4,
         "expected_score_range": [0.5, 0.85],
         "issue_ids": [1001, 1004, 1006, 1009],
         "success_criteria": (
@@ -68,6 +70,7 @@ TASKS = {
             "Agent must correctly escalate security issues and avoid overloading engineers."
         ),
         "difficulty": "hard",
+        "n_issues": 5,
         "expected_score_range": [0.3, 0.75],
         "issue_ids": [1002, 1008, 1010, 1001, 1004],
         "success_criteria": (
@@ -207,6 +210,14 @@ GRADERS = {
     "easy": grade_task_easy,
     "medium": grade_task_medium,
     "hard": grade_task_hard,
+}
+
+TASK_LIST = list(TASKS.values())
+TASK_COUNT = len(TASKS)
+TASKS_WITH_GRADERS = sum(1 for task in TASKS.values() if task.get("graders"))
+GRADER_SPECS = {
+    task_id: task.get("graders", [])
+    for task_id, task in TASKS.items()
 }
 
 
