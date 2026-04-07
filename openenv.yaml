@@ -145,6 +145,12 @@ tasks:
     success_criteria: >
       All issues labeled correctly and priorities kept within one level of
       ground truth.
+    graders:
+      - name: grade_task_easy
+        type: python_function
+        entrypoint: tasks:grade_task_easy
+        deterministic: true
+        score_range: [0.0, 1.0]
 
   - id: medium
     name: Mixed Backlog Triage
@@ -162,6 +168,12 @@ tasks:
     success_criteria: >
       Identify the duplicate correctly, keep the email bug at medium or
       higher priority, and avoid overloading engineers.
+    graders:
+      - name: grade_task_medium
+        type: python_function
+        entrypoint: tasks:grade_task_medium
+        deterministic: true
+        score_range: [0.0, 1.0]
 
   - id: hard
     name: Security Incident + Overloaded Team
@@ -180,6 +192,26 @@ tasks:
     success_criteria: >
       Security vulnerabilities escalated correctly, critical incidents
       protected from under-prioritization, and team capacity respected.
+    graders:
+      - name: grade_task_hard
+        type: python_function
+        entrypoint: tasks:grade_task_hard
+        deterministic: true
+        score_range: [0.0, 1.0]
+
+graders:
+  easy:
+    entrypoint: tasks:grade_task_easy
+    deterministic: true
+    score_range: [0.0, 1.0]
+  medium:
+    entrypoint: tasks:grade_task_medium
+    deterministic: true
+    score_range: [0.0, 1.0]
+  hard:
+    entrypoint: tasks:grade_task_hard
+    deterministic: true
+    score_range: [0.0, 1.0]
 
 runtime:
   framework: fastapi

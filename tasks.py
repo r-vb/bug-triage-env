@@ -24,6 +24,15 @@ TASKS = {
         "success_criteria": (
             "All 3 issues correctly labeled. Priority within 1 level of ground truth."
         ),
+        "graders": [
+            {
+                "name": "grade_task_easy",
+                "type": "python_function",
+                "entrypoint": "tasks:grade_task_easy",
+                "deterministic": True,
+                "score_range": [0.0, 1.0],
+            }
+        ],
     },
     "medium": {
         "id": "medium",
@@ -40,6 +49,15 @@ TASKS = {
             "Duplicate correctly labeled. Email bug at MEDIUM or higher. "
             "Performance issue at HIGH. Assignees within team capacity."
         ),
+        "graders": [
+            {
+                "name": "grade_task_medium",
+                "type": "python_function",
+                "entrypoint": "tasks:grade_task_medium",
+                "deterministic": True,
+                "score_range": [0.0, 1.0],
+            }
+        ],
     },
     "hard": {
         "id": "hard",
@@ -56,6 +74,15 @@ TASKS = {
             "Both security issues marked CRITICAL. Memory leak marked CRITICAL. "
             "No engineer assigned more hours than their capacity. SLA breaches = 0."
         ),
+        "graders": [
+            {
+                "name": "grade_task_hard",
+                "type": "python_function",
+                "entrypoint": "tasks:grade_task_hard",
+                "deterministic": True,
+                "score_range": [0.0, 1.0],
+            }
+        ],
     },
 }
 

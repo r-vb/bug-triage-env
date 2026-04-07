@@ -1,7 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
-from fastapi import Request
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 from typing import Optional
 import uvicorn
@@ -84,7 +83,55 @@ def root(request: Request):
 
 @app.api_route("/health", methods=["GET", "HEAD"])
 def health():
-    return {"status": "ok"}
+    return {"status": "healthy"}
+
+
+@app.get("/metadata")
+def metadata():
+    return {
+        "name": "bug-triage-openenv",
+        "description": (
+            "A real-world OpenEnv environment that simulates GitHub issue triage "
+            "with three deterministic graded tasks."
+        ),
+        "tasks": list(TASKS.values()),
+    }
+
+
+@app.get("/schema")
+def schema():
+    return {
+        "action": Action.model_json_schema(),
+        "observation": Observation.model_json_schema(),
+        "state": {
+            "type": "object",
+            "properties": {
+                "issues": {"type": "array"},
+                "inbox": {"type": "array"},
+                "triaged": {"type": "array"},
+                "team_capacity": {"type": "object"},
+                "sla_breached": {"type": "integer"},
+                "step": {"type": "integer"},
+                "max_steps": {"type": "integer"},
+                "total_reward": {"type": "number"},
+                "done": {"type": "boolean"},
+            },
+        },
+    }
+
+
+@app.post("/mcp")
+async def mcp(_: Request):
+    return JSONResponse(
+        {
+            "jsonrpc": "2.0",
+            "id": None,
+            "error": {
+                "code": -32601,
+                "message": "MCP tools are not implemented for this environment.",
+            },
+        }
+    )
 
 
 @app.post("/reset")
@@ -141,7 +188,11 @@ def state(task_id: str = "easy"):
 
 @app.get("/tasks")
 def list_tasks():
-    return {"tasks": list(TASKS.values())}
+    return {
+        "tasks": list(TASKS.values()),
+        "count": len(TASKS),
+        "tasks_with_graders": sum(1 for task in TASKS.values() if task.get("graders")),
+    }
 
 
 @app.get("/baseline-scores")
