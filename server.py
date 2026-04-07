@@ -44,6 +44,21 @@ def _read_baseline_scores() -> dict:
         return {}
 
 
+def _task_payloads() -> list[dict]:
+    return list(TASKS.values())
+
+
+def _grader_registry() -> dict[str, list[dict]]:
+    return {
+        task_id: task.get("graders", [])
+        for task_id, task in TASKS.items()
+    }
+
+
+def _tasks_with_graders() -> int:
+    return sum(1 for task in TASKS.values() if task.get("graders"))
+
+
 # ─── Schemas ──────────────────────────────────────────────────────────────────
 
 class StepRequest(BaseModel):
@@ -94,7 +109,10 @@ def metadata():
             "A real-world OpenEnv environment that simulates GitHub issue triage "
             "with three deterministic graded tasks."
         ),
-        "tasks": list(TASKS.values()),
+        "task_count": len(TASKS),
+        "tasks_with_graders": _tasks_with_graders(),
+        "tasks": _task_payloads(),
+        "graders": _grader_registry(),
     }
 
 
@@ -189,9 +207,11 @@ def state(task_id: str = "easy"):
 @app.get("/tasks")
 def list_tasks():
     return {
-        "tasks": list(TASKS.values()),
+        "tasks": _task_payloads(),
         "count": len(TASKS),
-        "tasks_with_graders": sum(1 for task in TASKS.values() if task.get("graders")),
+        "tasks_with_graders": _tasks_with_graders(),
+        "all_have_graders": _tasks_with_graders() == len(TASKS),
+        "graders": _grader_registry(),
     }
 
 
