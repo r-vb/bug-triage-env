@@ -1,68 +1,34 @@
-import json
-import os
-import time
-from typing import List
+"""
+inference.py — Baseline inference script for Bug Triage OpenEnv.
 
-from fastapi.testclient import TestClient
+Uses the OpenAI client with API_BASE_URL + MODEL_NAME + HF_TOKEN env vars.
+Runs the agent against all 3 tasks and produces reproducible scores.
+
+Usage:
+    export API_BASE_URL=https://router.huggingface.co/v1
+    export MODEL_NAME=meta-llama/Llama-3.1-8B-Instruct
+    export HF_TOKEN=hf_...
+    python inference.py
+"""
+
+import os
+import json
+import sys
 from openai import OpenAI
 
-from environment import Action, IssueLabel, IssueStatus, Observation, Priority
-from server import app
+from environment import BugTriageEnv, Action, Priority, IssueLabel, IssueStatus, Observation
+from tasks import GRADERS, TASKS
 
+# ─── Config ───────────────────────────────────────────────────────────────────
 
-BENCHMARK = "bug-triage-openenv"
-TASK_NAME = "all"
-TASK_IDS = ["easy", "medium", "hard"]
-SUCCESS_SCORE_THRESHOLD = 0.5
-MAX_RUNTIME_SECONDS = 20 * 60
+API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.openai.com/v1")
+MODEL_NAME = os.environ.get("MODEL_NAME", "gpt-4o-mini")
+HF_TOKEN = os.environ.get("HF_TOKEN", "")
 
-
-def load_dotenv(path: str = ".env") -> None:
-    """Load simple KEY=VALUE pairs from a local .env file if present."""
-    if not os.path.exists(path):
-        return
-
-    with open(path, encoding="utf-8") as f:
-        for raw_line in f:
-            line = raw_line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-
-            key, value = line.split("=", 1)
-            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
-
-
-def log_start(task: str, env: str, model: str) -> None:
-    print(f"[START] task={task} env={env} model={model}", flush=True)
-
-
-def log_step(step: int, action: str, reward: float, done: bool, error: str | None) -> None:
-    error_value = "None" if error is None else json.dumps(error)
-    print(
-        f"[STEP] step={step} action={action} reward={reward:.4f} "
-        f"done={str(done).lower()} error={error_value}",
-        flush=True,
-    )
-
-
-def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
-    print(
-        f"[END] success={str(success).lower()} steps={steps} "
-        f"score={score:.4f} rewards={json.dumps([round(r, 4) for r in rewards])}",
-        flush=True,
-    )
-
-
-load_dotenv()
-
-API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "meta-llama/Llama-3.1-8B-Instruct")
-HF_TOKEN = os.getenv("HF_TOKEN")
-
-if not HF_TOKEN:
-    raise ValueError("Missing required environment variable: HF_TOKEN")
-
-client = OpenAI(api_key=HF_TOKEN, base_url=API_BASE_URL)
+client = OpenAI(
+    api_key=HF_TOKEN or "dummy",
+    base_url=API_BASE_URL,
+)
 
 SYSTEM_PROMPT = """You are an expert engineering manager triaging GitHub issues.
 
@@ -77,73 +43,41 @@ For each issue you receive, you must output a JSON object with exactly these fie
   "estimated_fix_hours": <float or null>
 }
 
-Output ONLY the JSON object.
-"""
+Priority guidelines:
+- critical: security vulnerabilities, production crashes, data loss
+- high: significant bugs affecting many users, performance regressions in production
+- medium: bugs affecting some users, broken non-critical features
+- low: minor bugs, feature requests, documentation
+- wont_fix: out of scope, duplicate of another issue
+
+Available engineers: alice (16h), bob (12h), carol (20h), dave (8h)
+
+Output ONLY the JSON object, no explanation."""
 
 
 def obs_to_prompt(obs: Observation) -> str:
     issue = obs.current_issue
     lines = [
         f"Issue #{issue.id}: {issue.title}",
-        f"Author: {issue.author}",
+        f"Author: {issue.author} {'(first-time contributor)' if issue.is_first_time_contributor else ''}",
         f"Body: {issue.body}",
-        f"Inbox size: {obs.inbox_size}",
-        f"Triaged count: {obs.triaged_count}",
-        f"Team capacity: {json.dumps(obs.team_capacity)}",
-        f"SLA breached count: {obs.sla_breached_count}",
     ]
     if issue.comments:
-        lines.append("Comments:\n" + "\n".join(issue.comments))
+        lines.append("Comments:\n" + "\n".join(f"  - {c}" for c in issue.comments))
     if issue.stack_trace:
         lines.append(f"Stack trace:\n{issue.stack_trace}")
     if issue.affected_users_count:
         lines.append(f"Affected users: {issue.affected_users_count}")
+    if issue.reactions:
+        lines.append(f"Reactions: {issue.reactions}")
+    lines.append(f"\nTeam capacity: {obs.team_capacity}")
+    lines.append(f"Inbox remaining: {obs.inbox_size} | SLA breaches so far: {obs.sla_breached_count}")
     return "\n".join(lines)
 
 
-def safe_parse_action(raw: str, obs: Observation) -> Action:
-    try:
-        cleaned = raw.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.split("```")[1]
-            if cleaned.startswith("json"):
-                cleaned = cleaned[4:]
-        data = json.loads(cleaned.strip())
-        return Action(
-            issue_id=data["issue_id"],
-            priority=Priority(data["priority"]),
-            label=IssueLabel(data["label"]),
-            status=IssueStatus(data["status"]),
-            assignee=data.get("assignee"),
-            comment=data.get("comment"),
-            estimated_fix_hours=data.get("estimated_fix_hours"),
-        )
-    except Exception:
-        return Action(
-            issue_id=obs.current_issue.id,
-            priority=Priority.MEDIUM,
-            label=IssueLabel.BUG,
-            status=IssueStatus.OPEN,
-            assignee=None,
-            comment="Fallback due to parsing error",
-            estimated_fix_hours=None,
-        )
-
-
-def parse_observation(payload: dict) -> Observation:
-    return Observation.model_validate(payload)
-
-
-def get_model_action(obs: Observation, task_id: str, step: int, history: List[str]) -> Action:
-    prompt = "\n\n".join(
-        [
-            f"Task: {task_id}",
-            f"Step: {step}",
-            obs_to_prompt(obs),
-            "Recent history:",
-            "\n".join(history[-3:]) if history else "None",
-        ]
-    )
+def llm_agent(obs: Observation) -> Action:
+    """Call the LLM and parse its response into an Action."""
+    prompt = obs_to_prompt(obs)
 
     response = client.chat.completions.create(
         model=MODEL_NAME,
@@ -154,107 +88,128 @@ def get_model_action(obs: Observation, task_id: str, step: int, history: List[st
         temperature=0.0,
         max_tokens=300,
     )
-    raw = response.choices[0].message.content or ""
-    return safe_parse_action(raw, obs)
 
+    raw = response.choices[0].message.content.strip()
 
-def summarize_action(task_id: str, action: Action) -> str:
-    return (
-        f"task={task_id},issue_id={action.issue_id},priority={action.priority.value},"
-        f"label={action.label.value},status={action.status.value},"
-        f"assignee={action.assignee},estimated_fix_hours={action.estimated_fix_hours}"
+    # Strip markdown fences if present
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+    raw = raw.strip()
+
+    data = json.loads(raw)
+
+    return Action(
+        issue_id=data["issue_id"],
+        priority=Priority(data["priority"]),
+        label=IssueLabel(data["label"]),
+        status=IssueStatus(data["status"]),
+        assignee=data.get("assignee"),
+        comment=data.get("comment"),
+        estimated_fix_hours=data.get("estimated_fix_hours"),
     )
 
 
-def main() -> None:
-    history: List[str] = []
-    rewards: List[float] = []
-    task_scores: dict[str, float] = {}
-    steps_taken = 0
-    global_step = 0
-    success = False
-    start_time = time.time()
-    client_env = TestClient(app)
+def run_task_with_logs(task_id: str) -> float:
+    """Run a task with structured [START]/[STEP]/[END] logging."""
+    task_info = TASKS[task_id]
 
-    log_start(task=TASK_NAME, env=BENCHMARK, model=MODEL_NAME)
+    # [START] log
+    print(json.dumps({
+        "type": "START",
+        "task_id": task_id,
+        "task_name": task_info["name"],
+        "difficulty": task_info["difficulty"],
+        "model": MODEL_NAME,
+    }), flush=True)
 
-    try:
-        for task_id in TASK_IDS:
-            task_rewards: List[float] = []
-            reset_res = client_env.post("/reset", json={"task_id": task_id, "seed": 42})
-            reset_res.raise_for_status()
-            obs = parse_observation(reset_res.json())
-            done = False
-            info = None
+    env = BugTriageEnv(task_id=task_id, seed=42)
+    obs = env.reset()
+    total_reward = 0.0
+    steps = 0
 
-            try:
-                while not done:
-                    if time.time() - start_time > MAX_RUNTIME_SECONDS:
-                        raise TimeoutError("Inference exceeded runtime limit")
+    while True:
+        action = llm_agent(obs)
+        obs, reward, done, info = env.step(action)
+        total_reward += reward
+        steps += 1
 
-                    global_step += 1
-                    action = get_model_action(obs, task_id, global_step, history)
-                    action_summary = summarize_action(task_id, action)
+        # [STEP] log
+        print(json.dumps({
+            "type": "STEP",
+            "task_id": task_id,
+            "step": steps,
+            "issue_id": action.issue_id,
+            "action": {
+                "priority": action.priority.value,
+                "label": action.label.value,
+                "status": action.status.value,
+                "assignee": action.assignee,
+                "comment": action.comment,
+            },
+            "reward": round(reward, 4),
+            "done": done,
+        }), flush=True)
 
-                    step_res = client_env.post(
-                        "/step",
-                        json={"task_id": task_id, "action": action.model_dump()},
-                    )
-                    step_res.raise_for_status()
-                    step_payload = step_res.json()
-                    next_obs = parse_observation(step_payload["observation"])
-                    reward = step_payload["reward"] or 0.0
-                    done = bool(step_payload["done"])
-                    info = step_payload["info"]
+        if done:
+            break
 
-                    rewards.append(reward)
-                    task_rewards.append(reward)
-                    steps_taken = global_step
+    final_score = round(total_reward / max(1, steps), 4)
 
-                    log_step(
-                        step=global_step,
-                        action=action_summary,
-                        reward=reward,
-                        done=done,
-                        error=None,
-                    )
+    # [END] log
+    print(json.dumps({
+        "type": "END",
+        "task_id": task_id,
+        "score": final_score,
+        "steps": steps,
+        "sla_breaches": info.sla_breaches,
+    }), flush=True)
 
-                    history.append(
-                        f"Task {task_id} step {global_step}: {action_summary} -> reward {reward:.4f}"
-                    )
+    return final_score
 
-                    obs = next_obs
-                    if done:
-                        break
 
-                task_score = info["total_reward"] if task_rewards and info else 0.0
-                task_scores[task_id] = round(max(0.0, min(1.0, task_score)), 4)
+# ─── Main ─────────────────────────────────────────────────────────────────────
 
-            except Exception as exc:
-                task_scores[task_id] = 0.0
-                log_step(
-                    step=global_step + 1,
-                    action=f"task={task_id},status=error",
-                    reward=0.0,
-                    done=True,
-                    error=str(exc),
-                )
+def main():
+    print("=" * 60)
+    print("Bug Triage OpenEnv — Baseline Inference")
+    print(f"Model : {MODEL_NAME}")
+    print(f"API   : {API_BASE_URL}")
+    print("=" * 60)
 
-            finally:
-                pass
+    all_scores = {}
 
-        overall = sum(task_scores.values()) / len(TASK_IDS)
-        overall = round(max(0.0, min(1.0, overall)), 4)
-        task_scores["overall"] = overall
+    for task_id in ["easy", "medium", "hard"]:
+        print(f"\n▶ Running task: {task_id}")
+        try:
+            score = run_task_with_logs(task_id)
+            all_scores[task_id] = score
+            print(f"  ✓ Score: {score:.4f}")
+        except Exception as e:
+            print(f"  ✗ Error: {e}", file=sys.stderr)
+            print(json.dumps({
+                "type": "END",
+                "task_id": task_id,
+                "score": 0.0,
+                "steps": 0,
+                "error": str(e),
+            }), flush=True)
+            all_scores[task_id] = 0.0
 
-        with open("baseline_scores.json", "w", encoding="utf-8") as f:
-            json.dump(task_scores, f, indent=2)
+    overall = sum(all_scores.values()) / len(all_scores)
+    all_scores["overall"] = round(overall, 4)
 
-        success = overall >= SUCCESS_SCORE_THRESHOLD
+    print("\n" + "=" * 60)
+    print("FINAL SCORES")
+    print("=" * 60)
+    for k, v in all_scores.items():
+        print(f"  {k:10s}: {v:.4f}")
+    print("=" * 60)
 
-    finally:
-        score = task_scores.get("overall", 0.0)
-        log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
+    with open("baseline_scores.json", "w") as f:
+        json.dump(all_scores, f, indent=2)
+    print("\nScores written to baseline_scores.json")
 
 
 if __name__ == "__main__":
