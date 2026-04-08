@@ -34,6 +34,13 @@ TASKS = {
                 "score_range": [0.0, 1.0],
             }
         ],
+        "grader": {
+            "name": "grade_task_easy",
+            "type": "python_function",
+            "entrypoint": "tasks:grade_task_easy",
+            "deterministic": True,
+            "score_range": [0.0, 1.0],
+        },
     },
     "medium": {
         "id": "medium",
@@ -60,6 +67,13 @@ TASKS = {
                 "score_range": [0.0, 1.0],
             }
         ],
+        "grader": {
+            "name": "grade_task_medium",
+            "type": "python_function",
+            "entrypoint": "tasks:grade_task_medium",
+            "deterministic": True,
+            "score_range": [0.0, 1.0],
+        },
     },
     "hard": {
         "id": "hard",
@@ -86,6 +100,13 @@ TASKS = {
                 "score_range": [0.0, 1.0],
             }
         ],
+        "grader": {
+            "name": "grade_task_hard",
+            "type": "python_function",
+            "entrypoint": "tasks:grade_task_hard",
+            "deterministic": True,
+            "score_range": [0.0, 1.0],
+        },
     },
 }
 
@@ -217,6 +238,10 @@ TASK_COUNT = len(TASKS)
 TASKS_WITH_GRADERS = sum(1 for task in TASKS.values() if task.get("graders"))
 GRADER_SPECS = {
     task_id: task.get("graders", [])
+    for task_id, task in TASKS.items()
+}
+SINGLE_GRADER_SPECS = {
+    task_id: task.get("grader")
     for task_id, task in TASKS.items()
 }
 

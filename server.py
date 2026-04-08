@@ -7,7 +7,14 @@ import uvicorn
 import os
 
 from environment import BugTriageEnv, Action, Observation, EnvInfo
-from tasks import TASKS, TASK_LIST, TASK_COUNT, TASKS_WITH_GRADERS, GRADER_SPECS
+from tasks import (
+    TASKS,
+    TASK_LIST,
+    TASK_COUNT,
+    TASKS_WITH_GRADERS,
+    GRADER_SPECS,
+    SINGLE_GRADER_SPECS,
+)
 
 app = FastAPI(
     title="Bug Triage OpenEnv",
@@ -50,6 +57,10 @@ def _task_payloads() -> list[dict]:
 
 def _grader_registry() -> dict[str, list[dict]]:
     return GRADER_SPECS
+
+
+def _single_grader_registry() -> dict[str, dict | None]:
+    return SINGLE_GRADER_SPECS
 
 
 def _tasks_with_graders() -> int:
@@ -108,8 +119,10 @@ def metadata():
         ),
         "task_count": TASK_COUNT,
         "tasks_with_graders": _tasks_with_graders(),
+        "grader_count": _tasks_with_graders(),
         "tasks": _task_payloads(),
         "graders": _grader_registry(),
+        "grader_registry": _single_grader_registry(),
     }
 
 
@@ -206,9 +219,12 @@ def list_tasks():
     return {
         "tasks": _task_payloads(),
         "count": TASK_COUNT,
+        "task_count": TASK_COUNT,
         "tasks_with_graders": _tasks_with_graders(),
+        "grader_count": _tasks_with_graders(),
         "all_have_graders": _tasks_with_graders() == TASK_COUNT,
         "graders": _grader_registry(),
+        "grader_registry": _single_grader_registry(),
     }
 
 

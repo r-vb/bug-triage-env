@@ -156,6 +156,12 @@ tasks:
         entrypoint: tasks:grade_task_easy
         deterministic: true
         score_range: [0.0, 1.0]
+    grader:
+      name: grade_task_easy
+      type: python_function
+      entrypoint: tasks:grade_task_easy
+      deterministic: true
+      score_range: [0.0, 1.0]
 
   - id: medium
     name: Mixed Backlog Triage
@@ -179,6 +185,12 @@ tasks:
         entrypoint: tasks:grade_task_medium
         deterministic: true
         score_range: [0.0, 1.0]
+    grader:
+      name: grade_task_medium
+      type: python_function
+      entrypoint: tasks:grade_task_medium
+      deterministic: true
+      score_range: [0.0, 1.0]
 
   - id: hard
     name: Security Incident + Overloaded Team
@@ -203,6 +215,12 @@ tasks:
         entrypoint: tasks:grade_task_hard
         deterministic: true
         score_range: [0.0, 1.0]
+    grader:
+      name: grade_task_hard
+      type: python_function
+      entrypoint: tasks:grade_task_hard
+      deterministic: true
+      score_range: [0.0, 1.0]
 
 graders:
   easy:
