@@ -7,210 +7,231 @@ sdk: docker
 pinned: false
 ---
 
-# 🐛 Bug Triage OpenEnv
+# Bug Triage OpenEnv
 
-A real-world OpenEnv environment that simulates **GitHub issue triage** — one of the most common and high-value tasks in software engineering.
+Bug Triage OpenEnv is a compact evaluation environment for AI agents that simulates GitHub issue triage. An agent acts like an engineering manager: it sees one issue at a time, chooses a priority, label, status, optional assignee, optional effort estimate, and a short rationale, then receives a reward based on triage quality, SLA handling, and team-capacity awareness.
 
-An AI agent acts as an engineering manager processing a backlog of GitHub issues. For each issue, it must assign a **priority**, **label**, **status**, and optionally an **engineer** — while managing team capacity and SLA compliance.
+The repository includes the environment, deterministic task graders, a FastAPI server, a demo landing page, and a sample baseline inference runner.
 
----
+## What is in this repo
 
-## Motivation
+- `environment.py`: core environment, typed models, issue bank, reward logic
+- `tasks.py`: three benchmark tasks plus deterministic graders
+- `server.py`: FastAPI app and HTTP endpoints
+- `server/app.py`: OpenEnv deployment entrypoint
+- `inference.py`: sample baseline runner using the OpenAI client
+- `index.html`: static demo UI served from `/`
+- `openenv.yaml`: OpenEnv metadata and task/schema description
+- `baseline_scores.json`: latest recorded baseline results
+- `Dockerfile`: container setup for local Docker or Hugging Face Spaces
 
-Issue triage is a task every engineering team does daily. Poor triage leads to:
-- Security vulnerabilities sitting unaddressed
-- SLA breaches on customer-facing bugs  
-- Engineers overloaded while others are idle
+## Environment overview
 
-This environment trains agents to triage intelligently using real signals: stack traces, user impact counts, reactions, comments, and team capacity.
+Each step presents the agent with a GitHub-style issue containing fields like title, body, comments, reactions, stack trace, reproducibility, and affected-user count. The agent returns a structured action:
 
----
+```json
+{
+  "issue_id": 1001,
+  "priority": "high",
+  "label": "bug",
+  "status": "in_progress",
+  "assignee": "carol",
+  "comment": "This is a user-facing regression affecting many users.",
+  "estimated_fix_hours": 6.0
+}
+```
 
-## Environment Description
+Reward is clipped to `0.0-1.0` and combines:
 
-### Action Space
-
-| Field | Type | Values |
-|-------|------|--------|
-| `issue_id` | int | ID of the issue |
-| `priority` | enum | `critical`, `high`, `medium`, `low`, `wont_fix` |
-| `label` | enum | `bug`, `feature`, `performance`, `security`, `documentation`, `question`, `duplicate` |
-| `status` | enum | `open`, `in_progress`, `needs_info`, `closed` |
-| `assignee` | str \| null | Engineer username |
-| `comment` | str \| null | Triage rationale |
-| `estimated_fix_hours` | float \| null | Estimated hours to fix |
-
-### Observation Space
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `current_issue` | object | Full GitHub issue (title, body, comments, reactions, stack trace, affected users) |
-| `inbox_size` | int | Issues remaining |
-| `triaged_count` | int | Issues already triaged |
-| `team_capacity` | dict | Engineer → available hours |
-| `sla_breached_count` | int | Critical/high issues under-prioritized so far |
-| `step_number` | int | Current step |
-| `max_steps` | int | Total steps in episode |
-
-### Reward Function
-
-Per-step reward in `[0.0, 1.0]`:
-
-| Component | Weight | Description |
-|-----------|--------|-------------|
-| Priority accuracy | 0.50 | Exact match = 1.0, off-by-1 = 0.5, off-by-2 = 0.2 |
-| Label accuracy | 0.30 | Correct label = 1.0, else 0.0 |
-| Capacity management | 0.10 | Assignee has enough hours |
-| Comment quality | 0.10 | Substantive comment = higher score |
-| SLA penalty | −0.30 | Applied when critical/high issue is under-prioritized |
-
----
+- priority accuracy: `0.50`
+- label accuracy: `0.30`
+- capacity management: `0.10`
+- comment quality: `0.10`
+- SLA penalty for under-prioritizing critical/high issues: `-0.30`
 
 ## Tasks
 
-### Easy — Basic Issue Classification
-- **Issues:** 3 (documentation typo, feature request, user question)  
-- **Goal:** Correctly label and prioritize clearly-typed issues  
-- **Expected score:** 0.70–1.00  
-- **Key challenge:** Resist over-prioritizing user questions
+| Task | Difficulty | Issues | Goal |
+|------|------------|--------|------|
+| `easy` | easy | 3 | Classify straightforward documentation, feature, and question issues |
+| `medium` | medium | 4 | Handle a mixed backlog with bugs, performance regression, and a duplicate |
+| `hard` | hard | 5 | Escalate security and production-critical issues while respecting team capacity |
 
-### Medium — Mixed Backlog Triage  
-- **Issues:** 4 (bugs, performance regression, duplicate)  
-- **Goal:** Identify the duplicate, catch the broken email flow at MEDIUM+  
-- **Expected score:** 0.50–0.85  
-- **Key challenge:** Distinguishing a real bug from a known duplicate
+The current issue bank includes examples like:
 
-### Hard — Security Incident + Overloaded Team  
-- **Issues:** 5 (2 security vulns, memory leak, perf bug, login bug)  
-- **Goal:** Escalate both security issues to CRITICAL, manage capacity  
-- **Expected score:** 0.30–0.75  
-- **Key challenge:** SQL injection and API rate-limit bypass must both be CRITICAL; team is at limited capacity
+- login crashes
+- SQL injection
+- performance regressions
+- duplicate issues
+- documentation fixes
+- support questions
+- memory leaks
+- broken invitation emails
 
----
+## API
 
-## API Reference
+The FastAPI server exposes:
 
-### `POST /reset`
-```json
-{ "task_id": "easy", "seed": 42 }
-```
-Returns initial `Observation`.
+- `GET /`: serves `index.html` for browsers and returns JSON to JSON clients
+- `GET /health`: simple health check
+- `GET /metadata`: environment metadata, tasks, and grader registry
+- `GET /schema`: JSON schema for action/observation/state
+- `GET /tasks`: task list and grader info
+- `GET /state?task_id=easy`: current internal environment state
+- `GET /baseline-scores`: contents of `baseline_scores.json`
+- `POST /reset`: start or restart a task
+- `POST /step`: submit one triage action
+- `POST /mcp`: placeholder MCP response
+- `GET /docs`: Swagger UI from FastAPI
 
-### `POST /step`
+Example reset request:
+
 ```json
 {
   "task_id": "easy",
-  "action": {
-    "issue_id": 1003,
-    "priority": "low",
-    "label": "documentation",
-    "status": "open",
-    "assignee": "alice",
-    "comment": "Minor typo in README, low effort fix.",
-    "estimated_fix_hours": 0.5
-  }
+  "seed": 42
 }
 ```
-Returns `{ observation, reward, done, info }`.
 
-### `GET /state?task_id=easy`
-Returns full internal state.
+Concrete `curl` examples:
 
-### `GET /tasks`
-Lists all tasks with descriptions.
-
----
-
-## Setup & Running
-
-### Local
 ```bash
+curl -X POST http://localhost:7860/reset \
+  -H "Content-Type: application/json" \
+  -d "{\"task_id\":\"easy\",\"seed\":42}"
+```
+
+```bash
+curl -X POST http://localhost:7860/step \
+  -H "Content-Type: application/json" \
+  -d "{\"task_id\":\"easy\",\"action\":{\"issue_id\":1003,\"priority\":\"low\",\"label\":\"documentation\",\"status\":\"open\",\"assignee\":null,\"comment\":\"This is a minor documentation issue with low urgency.\",\"estimated_fix_hours\":null}}"
+```
+
+## Local setup
+
+### Option 1: pip
+
+```bash
+python -m venv .venv
+. .venv/bin/activate
 pip install -r requirements.txt
+pip install openenv-core
 python server.py
-# Server starts at http://localhost:7860
 ```
 
-### Local Environment Variables
-Create a local `.env` file for baseline inference:
+On Windows PowerShell:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+pip install openenv-core
+python server.py
+```
+
+### Option 2: uv
 
 ```bash
-API_BASE_URL=https://router.huggingface.co/v1
-MODEL_NAME=meta-llama/Llama-3.1-8B-Instruct
-HF_TOKEN=your_hf_token
+uv sync
+uv run python server.py
 ```
 
-### Docker
+The app listens on `http://localhost:7860`.
+
+## Baseline inference
+
+`inference.py` runs all three tasks against a chat model through the OpenAI client, prints structured logs, and writes the final scores to `baseline_scores.json`.
+
+Supported environment variables:
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `API_BASE_URL` | `https://api.openai.com/v1` | Base URL passed to the OpenAI client |
+| `MODEL_NAME` | `gpt-4o-mini` | Chat model used for triage |
+| `OPENAI_API_KEY` | none | Preferred API key variable |
+| `HF_TOKEN` | none | Also accepted as API key input |
+| `API_KEY` | none | Generic fallback key variable |
+| `TEMPERATURE` | `0.0` | Sampling temperature |
+| `MAX_TOKENS` | `350` | Max completion tokens per step |
+| `SUCCESS_SCORE_THRESHOLD` | `0.7` | Threshold used for per-task success logging |
+
+Example:
+
+```powershell
+$env:API_BASE_URL = "https://api.openai.com/v1"
+$env:MODEL_NAME = "gpt-4o-mini"
+$env:HF_TOKEN = "hf-..."
+python inference.py
+```
+
+The runner emits `[START]`, `[STEP]`, and `[END]` log lines and overwrites `baseline_scores.json` with the latest results.
+
+## Current baseline scores
+
+Latest checked-in scores from `baseline_scores.json`:
+
+| Task | Score |
+|------|-------|
+| easy | 0.8000 |
+| medium | 0.7508 |
+| hard | 0.8500 |
+| overall | 0.8003 |
+
+## Docker
+
 ```bash
 docker build -t bug-triage-env .
 docker run -p 7860:7860 bug-triage-env
 ```
 
-### Run Baseline Inference
+The container uses `python:3.11-slim` and starts the service with `python server.py`.
+
+## Validation
+
+This repo includes `pre_validate.sh` for pre-submission checks:
+
 ```bash
-python inference.py
+./pre_validate.sh https://r-vb-bug-triage-env.hf.space
 ```
 
-The script reads `API_BASE_URL`, `MODEL_NAME`, and `HF_TOKEN` from environment variables and emits structured stdout logs in `[START]`, `[STEP]`, and `[END]` format.
+It is intended to verify deployment behavior, Docker buildability, and OpenEnv validation before submission.
 
-### Validate Before Submission
-```bash
-./pre_validate.sh https://r-vb-bug-triage-env.hf.space/
-```
+## Project structure
 
-This checks:
-- the deployed Space responds to `POST /reset`
-- `docker build` succeeds
-- `openenv validate` passes
-
----
-
-## Baseline Scores
-
-Measured with `meta-llama/Llama-3.1-8B-Instruct` via HuggingFace Router at temperature 0:
-
-| Task | Score |
-|------|-------|
-| easy | 0.6667 |
-| medium | 0.8867 |
-| hard | 0.8440 |
-| **overall** | **0.7991** |
-
----
-
-## Project Structure
-
-```
+```text
 bug-triage-env/
-├── environment.py    # Core OpenEnv environment (BugTriageEnv)
-├── tasks.py          # Task definitions + graders
-├── server.py         # FastAPI HTTP server
+├── environment.py
+├── tasks.py
+├── server.py
 ├── server/
-│   └── app.py        # Entry point for openenv multi-mode deployment
-├── inference.py      # Baseline inference script
-├── openenv.yaml      # OpenEnv metadata
-├── pyproject.toml    # Project metadata and dependencies
-├── uv.lock           # Locked dependencies
-├── Dockerfile        # Container for HF Spaces
+│   └── app.py
+├── inference.py
+├── index.html
+├── openenv.yaml
+├── baseline_scores.json
+├── Dockerfile
 ├── requirements.txt
+├── pyproject.toml
 └── README.md
 ```
 
----
+## Notes
 
-## Qualification Checks
+- The environment is deterministic for a given `task_id` and `seed`.
+- The server keeps in-memory task state and requires `POST /reset` before `POST /step`.
+- `GET /baseline-scores` simply returns the checked-in JSON file, so results reflect the most recent local inference run that was committed.
 
-- ✅ HF Space deploys and responds to `/reset`
-- ✅ `openenv.yaml` present with typed models
-- ✅ `step()`, `reset()`, `state()` implemented
-- ✅ Dockerfile builds and runs
-- ✅ 3+ tasks with graders scoring 0.0–1.0
-- ✅ `inference.py` in root, uses OpenAI client, reads env vars
-- ✅ `inference.py` emits structured `[START]` / `[STEP]` / `[END]` logs
-- ✅ `pre_validate.sh` passes against the deployed HF Space
-- ✅ Graders are deterministic (seed-based)
-- ✅ Runtime < 20min, runs on 2vCPU / 8GB
+## Qualification checks
 
----
+| Check | Status | Evidence |
+|------|--------|----------|
+| OpenEnv metadata | Yes | `openenv.yaml` is present and documents the environment, tasks, schemas, and grader metadata. |
+| Environment lifecycle | Yes | `BugTriageEnv` implements `reset()`, `step()`, and `state()`. |
+| API endpoints | Yes | The FastAPI app exposes `POST /reset`, `POST /step`, `GET /tasks`, `GET /health`, and related routes. |
+| Deterministic graded tasks | Yes | The repository includes three deterministic graded tasks: `easy`, `medium`, and `hard`. |
+| Baseline inference runner | Yes | `inference.py` is in the repo root, uses the OpenAI client, reads environment variables, emits structured logs, and writes `baseline_scores.json`. |
+| Container support | Yes | The Dockerfile runs the service on port `7860` for containerized local use and Space-style deployment. |
+| Pre-submission validation | Yes | `pre_validate.sh` is included for validation workflows before submission. |
 
 *Built for the OpenEnv Hackathon by Team Axiom Minds.*
 
