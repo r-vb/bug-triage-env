@@ -52,7 +52,17 @@ def _read_baseline_scores() -> dict:
 
 
 def _task_payloads() -> list[dict]:
-    return TASK_LIST
+    payloads = []
+    for task in TASK_LIST:
+        payload = {
+            key: value
+            for key, value in task.items()
+            if key not in {"grader", "grader_spec"}
+        }
+        payload["grader"] = task.get("grader_spec")
+        payload["has_grader"] = callable(task.get("grader"))
+        payloads.append(payload)
+    return payloads
 
 
 def _grader_registry() -> dict[str, list[dict]]:
