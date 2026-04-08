@@ -96,7 +96,8 @@ class StepResponse(BaseModel):
 @app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 def root(request: Request):
     # If validator/tool explicitly asks for JSON
-    if request.headers.get("accept") == "application/json":
+    accept_header = request.headers.get("accept", "")
+    if "application/json" in accept_header.lower():
         return {"status": "ok", "service": "bug-triage-openenv"}
 
     html_path = os.path.join(os.path.dirname(__file__), "index.html")

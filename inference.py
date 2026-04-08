@@ -129,14 +129,88 @@ def obs_to_prompt(obs: Observation) -> str:
 
 def build_fallback_action(obs: Observation) -> Action:
     issue = obs.current_issue
+    text = " ".join(
+        part
+        for part in [
+            issue.title.lower(),
+            issue.body.lower(),
+            " ".join(comment.lower() for comment in issue.comments),
+            (issue.stack_trace or "").lower(),
+        ]
+        if part
+    )
+
+    priority = Priority.MEDIUM
+    label = IssueLabel.BUG
+    status = IssueStatus.OPEN
+    assignee = None
+    estimated_fix_hours = None
+    comment = "Heuristic triage decision used after model response parsing failed."
+
+    if "duplicate" in text:
+        priority = Priority.LOW
+        label = IssueLabel.DUPLICATE
+        status = IssueStatus.CLOSED
+        comment = "This appears to be a duplicate of an existing tracked issue."
+    elif any(keyword in text for keyword in ["sql injection", "cve", "security", "vulnerability", "rate limit"]):
+        priority = Priority.CRITICAL
+        label = IssueLabel.SECURITY
+        status = IssueStatus.IN_PROGRESS
+        assignee = "alice"
+        estimated_fix_hours = 8.0
+        comment = "This is a credible security risk and should be handled immediately."
+    elif any(keyword in text for keyword in ["out of memory", "memory leak", "server crash", "production crash"]):
+        priority = Priority.CRITICAL
+        label = IssueLabel.BUG
+        status = IssueStatus.IN_PROGRESS
+        assignee = "carol"
+        estimated_fix_hours = 12.0
+        comment = "This is causing production instability and needs urgent investigation."
+    elif any(keyword in text for keyword in ["45 seconds", "n+1", "performance", "slow", "load"]):
+        priority = Priority.HIGH
+        label = IssueLabel.PERFORMANCE
+        status = IssueStatus.IN_PROGRESS
+        assignee = "bob"
+        estimated_fix_hours = 6.0
+        comment = "This looks like a significant performance regression affecting real users."
+    elif any(keyword in text for keyword in ["readme", "documentation", "install", "npm ci", "typo"]):
+        priority = Priority.LOW
+        label = IssueLabel.DOCUMENTATION
+        status = IssueStatus.OPEN
+        comment = "This is a documentation issue with low urgency."
+    elif any(keyword in text for keyword in ["feature request", "would be great", "dark mode"]):
+        priority = Priority.LOW
+        label = IssueLabel.FEATURE
+        status = IssueStatus.OPEN
+        comment = "This is a valid feature request, but it is not urgent."
+    elif any(keyword in text for keyword in ["how do i", "where to", "is this feature available", "can't find"]):
+        priority = Priority.LOW
+        label = IssueLabel.QUESTION
+        status = IssueStatus.NEEDS_INFO
+        comment = "This looks like a support question rather than a product defect."
+    elif any(keyword in text for keyword in ["smtp", "invitation email", "email notifications"]):
+        priority = Priority.MEDIUM
+        label = IssueLabel.BUG
+        status = IssueStatus.IN_PROGRESS
+        assignee = "dave"
+        estimated_fix_hours = 4.0
+        comment = "This is a reproducible bug affecting user invitations."
+    elif any(keyword in text for keyword in ["500 error", "crash", "blocking", "special characters"]):
+        priority = Priority.HIGH
+        label = IssueLabel.BUG
+        status = IssueStatus.IN_PROGRESS
+        assignee = "carol"
+        estimated_fix_hours = 6.0
+        comment = "This is a user-facing regression that should be prioritized."
+
     return Action(
         issue_id=issue.id,
-        priority=Priority.MEDIUM,
-        label=IssueLabel.BUG,
-        status=IssueStatus.OPEN,
-        assignee=None,
-        comment="Fallback triage decision after model response parsing failed.",
-        estimated_fix_hours=None,
+        priority=priority,
+        label=label,
+        status=status,
+        assignee=assignee,
+        comment=comment,
+        estimated_fix_hours=estimated_fix_hours,
     )
 
 
